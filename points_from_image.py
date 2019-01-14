@@ -376,6 +376,9 @@ class Dot:
 	def merge(self, dot):
 		self.pixels = self.pixels.union(dot.pixels)
 
+	def size(self):
+		return len(self.pixels)
+
 def getRedDots(img_pair):
 	if img_pair.tvec is None or img_pair.rvec is None:
 		return
@@ -389,11 +392,10 @@ def getRedDots(img_pair):
 
 	for x in range(height):
 		for y in range(width):
-			if filter_img[x][y] == 255:
+			if filter_img[x][y] > 200:
 				filter_pixels.append((x, y))
 
-	print len(filter_pixels)
-
+	# Find the connected components ("dots")
 	dots = []
 	for x, y in filter_pixels:
 
@@ -412,6 +414,8 @@ def getRedDots(img_pair):
 				this_dot.merge(dot)
 				dots.remove(dot)
 
+
+	# Find the center of each dot. The center is defined as the brightest pixel
 	for dot in dots:
 		bright_value = None
 		bright_pixel = None
@@ -422,8 +426,21 @@ def getRedDots(img_pair):
 				bright_value = v
 				bright_pixel = (x, y)
 
-		print bright_value
 		dot.center = bright_pixel
+
+	# Find the center line dots
+	num_center_line = 19 + 21 - 1
+
+	sorted_dots = list(dots)
+	sorted_dots.sort(key = lambda x: x.size(), reverse = True)
+
+	cl_img = np.zeros((height, width), np.uint8)
+
+	for d in sorted_dots[:num_center_line]:
+		for x, y in d.pixels:
+			cl_img[x][y] = 255
+
+	cv2.imwrite('tmp.jpg', cl_img)
 
 	return dots
 
