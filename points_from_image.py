@@ -379,6 +379,18 @@ class Dot:
 	def size(self):
 		return len(self.pixels)
 
+# Finds the the value t s.t. the distance between f(t) = (xm, ym) * t + (xb, yb) and (x, y) is minimized
+# Returns the value of t, f(t), and the distance between f(t) and (x, y)
+def minDistToLine(x, y, xm, ym, xb, yb):
+	t = (xm * (x - xb) + ym * (y - yb)) / (pow(xm, 2.0) + pow(ym, 2.0))
+
+	fx = xm * t + xb
+	fy = ym * t + yb
+
+	d = math.sqrt(pow(fx - x, 2.0) + pow(fy - y, 2.0))
+
+	return t, fx, fy, d
+
 def getRedDots(img_pair):
 	if img_pair.tvec is None or img_pair.rvec is None:
 		return
@@ -428,19 +440,84 @@ def getRedDots(img_pair):
 
 		dot.center = bright_pixel
 
-	# Find the center line dots
+	# Find the center line dots (a dot where one of the GMs is set to 2^15)
+	# We purposefully had the GM stay on these for longer, so they are brighter/bigger
 	num_center_line = 19 + 21 - 1
 
 	sorted_dots = list(dots)
 	sorted_dots.sort(key = lambda x: x.size(), reverse = True)
 
-	cl_img = np.zeros((height, width), np.uint8)
+	cl_dots = sorted_dots[:num_center_line]
 
-	for d in sorted_dots[:num_center_line]:
-		for x, y in d.pixels:
-			cl_img[x][y] = 255
+	# Separate into two groups with exactly one dot in both, s.t. each group are close to co-linear
+	_, min_h_cl_dot = min((d.center[0], d) for d in cl_dots)
+	_, max_h_cl_dot = max((d.center[0], d) for d in cl_dots)
+	_, min_v_cl_dot = min((d.center[1], d) for d in cl_dots)
+	_, max_v_cl_dot = max((d.center[1], d) for d in cl_dots)
+	
+	# Find "origin" dot, by finding the intersection between the lines form between the min and max points of each direction.
+	hm = (max_h_cl_dot.center[0] - min_h_cl_dot.center[0], max_h_cl_dot.center[1] - min_h_cl_dot.center[1])
+	hb = (min_h_cl_dot.center[0], min_h_cl_dot.center[1])
 
-	cv2.imwrite('tmp.jpg', cl_img)
+	vm = (max_v_cl_dot.center[0] - min_v_cl_dot.center[0], max_v_cl_dot.center[1] - min_v_cl_dot.center[1])
+	vb = (min_v_cl_dot.center[0], min_v_cl_dot.center[1])
+
+	a = [[hm[0], -vm[0]],
+			[hm[1], -vm[1]]]
+	b = [vb[0] - hb[0], vb[1] - hb[1]]
+
+	c_ht, c_vt = np.linalg.solve(a, b)
+
+	orign_point = (hm[0] * c_ht + hb[0],
+					hm[1] * c_ht + hb[1])
+
+	min_dist = None
+	origin_dot  = None
+
+	for d in cl_dots:
+		this_dist = math.sqrt(pow(orign_point[0] - d.center[0], 2.0) + pow(orign_point[1] - d.center[1], 2.0))
+		if min_dist == None or min_dist > this_dist:
+			min_dist = this_dist
+			origin_dot  = d
+
+	vdots = []
+	hdots = []
+
+	for d in cl_dots:
+		if d == origin_dot:
+			hdots.append((d, c_ht))
+			vdots.append((d, c_vt))
+			continue
+
+		ht, hx, hy, hd = minDistToLine(d.center[0], d.center[1], hm[0], hm[1], hb[0], hb[1])
+		vt, vx, vy, vd = minDistToLine(d.center[0], d.center[1], vm[0], vm[1], vb[0], vb[1])
+
+		if hd <= vd:
+			hdots.append((d, ht))
+		elif vd < hd:
+			vdots.append((d, vt))
+
+	tmp_img = np.zeros((height, width, 3), np.uint8)
+	for hd, _ in hdots:
+		for x, y in hd.pixels:
+			tmp_img[x][y] = [0, 255, 0]
+
+	for he in [min_h_cl_dot, max_h_cl_dot]:
+		for x, y in he.pixels:
+			tmp_img[x][y] = [0, 255, 255]
+
+	for vd, _ in vdots:
+		for x, y in vd.pixels:
+			tmp_img[x][y] = [255, 0, 0]
+
+	for ve in [min_v_cl_dot, max_v_cl_dot]:
+		for x, y in ve.pixels:
+			tmp_img[x][y] = [255, 0, 255]
+
+	for x, y in origin_dot.pixels:
+		tmp_img[x][y] = [255, 255, 255]
+
+	cv2.imwrite('tmp.jpg', tmp_img)
 
 	return dots
 
