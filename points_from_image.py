@@ -5,6 +5,7 @@ import cv2
 import math
 import os
 from collections import defaultdict
+import itertools
 
 class CameraCalibration:
 	def __init__(self, fx, fy, cx, cy, k1, k2, k3, p1, p2):
@@ -29,7 +30,7 @@ class CameraCalibration:
 	def __str__(self):
 		return '(' + ', '.join(map(lambda x: x[0] + ': ' + str(x[1]), (('fx', self.fx), ('fy', self.fy), ('cx', self.cx), ('cy', self.cy), ('k1', self.k1), ('k2', self.k2), ('k3', self.k3), ('p1', self.p1), ('p2', self.p2)))) + ')'
 
-def outputCalibration(cal, fname):
+def outputCalibration(cal, image_pairs, fname):
 	f = open(fname, 'w')
 
 	f.write('fx ' + str(cal.fx) + '\n')
@@ -42,19 +43,74 @@ def outputCalibration(cal, fname):
 	f.write('p1 ' + str(cal.p1) + '\n')
 	f.write('p2 ' + str(cal.p2) + '\n')
 
+	for i, ip in enumerate(image_pairs):
+		f.write('img:' + str(i + 1))
+
+		# cal_fname
+		f.write(' cal_fname:' + str(ip.cal_fname))
+
+		# dot_fname
+		f.write(' dot_fname:' + str(ip.dot_fname))
+
+		f.write(' filter_fname:' + str(ip.filter_fname))
+
+		# rvec
+		f.write(' rvec:')
+		if ip.rvec is None:
+			f.write('None')
+		else:
+			f.write(','.join(map(str, ip.rvec.flatten())))
+
+		# tvec
+		f.write(' tvec:')
+		if ip.tvec is None:
+			f.write('None')
+		else:
+			f.write(','.join(map(str, ip.tvec.flatten())))
+
+		f.write('\n')
+
 	f.close()
 
-def inputCalibration(cal, fname):
+def inputCalibration(fname):
 	f = open(fname, 'r')
 
 	vals = {'fx': None, 'fy': None, 'cx': None, 'cy': None, 'k1': None, 'k2': None, 'k3': None, 'p1': None, 'p2': None}
+	imgs = []
 
 	for line in f:
-		token, val = line.split()
-		val = float(val)
+		spl = line.split()
+		token = spl[0]
 
 		if token in vals and vals[token] == None:
+			val = float(spl[1])
 			vals[token] = val
+		elif token[:3] == 'img':
+			cal_fname = None
+			dot_fname = None
+			filter_fname = None
+			tvec = None
+			rvec = None
+			for k, v in map(lambda x: x.split(':'), spl):
+				if k == 'cal_fname':
+					cal_fname = v
+				if k == 'dot_fname':
+					dot_fname = v
+				if k == 'filter_fname' and v != 'None':
+					filter_fname = v
+				if k == 'tvec':
+					if v != 'None':
+						tvec = np.array([[x] for x in map(float, v.split(','))])
+				if k == 'rvec':
+					if v != 'None':
+						rvec = np.array([[x] for x in map(float, v.split(','))])
+			
+			img = ImagePair(cal_fname, dot_fname)
+			img.filter_fname = filter_fname
+			img.tvec = tvec
+			img.rvec = rvec
+
+			imgs.append(img)
 		else:
 			if token not in vals:
 				raise Exception('Unexpected token: ' + token)
@@ -64,12 +120,14 @@ def inputCalibration(cal, fname):
 	if any(v == None for k, v in vals.iteritems()):
 		raise Exception('Missing values: ' + ', '.join(k for k, v in vals.iteritems() if v == None))
 
-	return CameraCalibration(**vals)
+	return CameraCalibration(**vals), imgs
 
 class ImagePair:
 	def __init__(self, cal_fname, dot_fname):
 		self.cal_fname = cal_fname
 		self.dot_fname = dot_fname
+
+		self.filter_fname = None
 
 		self.tvec = None
 		self.rvec = None
@@ -168,6 +226,7 @@ def calibrateCamera(image_pairs, show_images = False):
 	cal = CameraCalibration(fx, fy, cx, cy, k1, k2, k3, p1, p2)
 
 	print rvecs
+	print tvecs
 
 	for j, i in enumerate(working_inds):
 		image_pairs[i].rvec = rvecs[j]
@@ -269,12 +328,132 @@ def unproject(image_points, z_values, cal, rvec, tvec):
 
 	return np.array(real_points)
 
-if __name__ == '__main__':
-	image_pairs = getImagePairs('data/1-11/')
+def getRedFilter(img_pair):
+	if img_pair.tvec is None or img_pair.rvec is None:
+		return
 
+	dot_img = cv2.imread(img_pair.dot_fname)
+
+	height, width, _ = dot_img.shape
+
+	filter_img = np.zeros((height, width), np.uint8)
+
+	low_val = 10
+	high_val = 100
+
+	for x in range(height):
+		for y in range(width):
+			b, g, r = dot_img[x][y]
+
+			if b <= low_val and g <= low_val and r >= high_val:
+				filter_img[x][y] = 255
+
+	d = os.path.dirname(img_pair.dot_fname)
+
+	bn = os.path.basename(img_pair.dot_fname)
+	n = int(bn[bn.find('_') + 1:bn.find('.')])
+
+	img_pair.filter_fname = os.path.join(d, 'filter_' + str(n) + '.jpg')
+
+	print img_pair.filter_fname
+
+	cv2.imwrite(img_pair.filter_fname, filter_img)
+
+class Dot:
+	def __init__(self):
+		self.pixels = set()
+		self.center = None
+
+	def forceAdd(self, x, y):
+		self.pixels.add((x, y))
+
+	def add(self, x, y):
+		if any((x + a, y + b) in self.pixels for a, b in itertools.product([-2, -1, 0, 1, 2], repeat = 2)):
+			self.pixels.add((x, y))
+			return True
+		return False
+
+	def merge(self, dot):
+		self.pixels = self.pixels.union(dot.pixels)
+
+def getRedDots(img_pair):
+	if img_pair.tvec is None or img_pair.rvec is None:
+		return
+
+	dot_img = cv2.imread(img_pair.dot_fname)
+	filter_img = cv2.imread(img_pair.filter_fname, cv2.IMREAD_GRAYSCALE)
+
+	height, width, _ = dot_img.shape
+
+	filter_pixels = []
+
+	for x in range(height):
+		for y in range(width):
+			if filter_img[x][y] == 255:
+				filter_pixels.append((x, y))
+
+	print len(filter_pixels)
+
+	dots = []
+	for x, y in filter_pixels:
+
+		this_dots = [d for d in dots if d.add(x, y)]
+
+		if len(this_dots) == 0:
+			new_dot = Dot()
+			new_dot.forceAdd(x, y)
+			dots.append(new_dot)
+		if len(this_dots) == 1:
+			pass
+		if len(this_dots) > 1:
+
+			this_dot = this_dots[0]
+			for dot in this_dots[1:]:
+				this_dot.merge(dot)
+				dots.remove(dot)
+
+	for dot in dots:
+		bright_value = None
+		bright_pixel = None
+
+		for x, y in dot.pixels:
+			v = math.sqrt(sum(pow(v, 2.0) for v in dot_img[x][y]))
+			if bright_value == None or bright_value < v:
+				bright_value = v
+				bright_pixel = (x, y)
+
+		print bright_value
+		dot.center = bright_pixel
+
+	return dots
+
+
+
+def computeAndSaveCalibration(image_folder, output_file):
+	image_pairs = getImagePairs(image_folder)
 
 	# Calibration
 	cal = calibrateCamera(image_pairs)
+
+	outputCalibration(cal, image_pairs, output_file)
+
+def computeRedDots(cal_file):
+	cal, image_pairs = inputCalibration(cal_file)
+
+	for img_pair in image_pairs:
+		if img_pair.filter_fname == None:
+			getRedFilter(img_pair)
+
+		getRedDots(img_pair)
+
+		break
+
+	outputCalibration(cal, image_pairs, cal_file)
+
+if __name__ == '__main__':
+	# computeAndSaveCalibration('data/1-11/', 'cal_data_1-11.txt')
+
+	computeRedDots('cal_data_1-11.txt')
 
 else:
 
