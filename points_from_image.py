@@ -302,7 +302,7 @@ def projectSimp(real_points, cal, rvec, tvec):
 
 	points_proj = []
 	for rp in real_points:
-		rt_point = np.matmul(rot_mtx, rp) + tvec
+		rt_point = np.matmul(rot_mtx, rp) + tvec.flatten()
 
 		xp = rt_point[0] / rt_point[2]
 		yp = rt_point[1] / rt_point[2]
@@ -325,7 +325,9 @@ def unproject(image_points, z_values, cal, rvec, tvec):
 		def eq(vs):
 			x, y = vs
 
-			rv = projectSimp([[x, y, z]], cal, rvec, tvec)
+			rps = np.array([[x, y, z]])
+
+			rv = projectSimp(rps, cal, rvec, tvec)
 			calc_ix, calc_iy = rv[0]
 
 			return [ip[0] - calc_ix, ip[1] - calc_iy]
@@ -449,7 +451,7 @@ def getRedDots(img_pair):
 				bright_value = v
 				bright_pixel = (x, y)
 
-		dot.center = bright_pixel
+		dot.center = map(float, bright_pixel)
 
 	# Find the center line dots (a dot where one of the GMs is set to 2^15)
 	# We purposefully had the GM stay on these for longer, so they are brighter/bigger
@@ -539,6 +541,8 @@ def getRedDots(img_pair):
 
 	spiral_search =  sorted(dots_by_coord.keys(), key = lambda c: pow(c[0], 2) + pow(c[1], 2))
 
+	# print len(dots), (max_h - min_h + 1) * (max_v - min_v + 1) - len(missing_dots)
+
 	for x, y in spiral_search:
 		if dots_by_coord[(x, y)] != None or (x, y) in missing_dots:
 			continue
@@ -553,6 +557,9 @@ def getRedDots(img_pair):
 		approx_px = origin_dot.center[0] + (dots_by_coord[(ax, ay)].center[0] - origin_dot.center[0]) + (dots_by_coord[(bx, by)].center[0] - origin_dot.center[0])
 		approx_py = origin_dot.center[1] + (dots_by_coord[(ax, ay)].center[1] - origin_dot.center[1]) + (dots_by_coord[(bx, by)].center[1] - origin_dot.center[1])
 
+		if len(other_dots) == 0:
+			raise Exception('Ran out of dots')
+
 		min_dist = None
 		min_dot  = None
 
@@ -566,8 +573,14 @@ def getRedDots(img_pair):
 		dots_by_coord[(x, y)] = min_dot
 		other_dots.remove(min_dot)
 
+	# Calculates the gm_vals for each dot
 	for d in dots:
 		d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
+
+	# Checks that all dots have coord and gm_vals set
+	for d in dots:
+		if d.gm_vals is None or d.coord is None:
+			raise Exception('Didn\'t set the coordinates/gm_vals of a dot')
 
 	# Temporarily draw image for debugging purposes
 	# tmp_img = np.zeros((height, width, 3), np.uint8)
@@ -576,16 +589,12 @@ def getRedDots(img_pair):
 	# 	if d == None:
 	# 		print 'Skipping: (' + str(x) + ', ' + str(y) + ')'
 	# 		continue
-
 	# 	if y == 4:
 	# 		c = [0, 0, 255]
 	# 	else:
 	# 		c = [0, 0, 0]
-
 	# 	for x, y in d.pixels:
 	# 		tmp_img[x][y] = c
-
-
 
 	# for hd in hdots:
 	# 	for x, y in hd.pixels:
@@ -618,7 +627,7 @@ def computeRedDots(cal_file):
 		if img_pair.filter_fname == None:
 			getRedFilter(img_pair)
 
-		if img_pair.filter_fname != None and img_pair.filter_fname in ['data/1-11/filter_1.jpg', 'data/1-11/filter_2.jpg', 'data/1-11/filter_4.jpg']:
+		if img_pair.filter_fname != None and img_pair.filter_fname != 'data/1-11/filter_15.jpg':
 			print 'Getting Red Dots for image', img_pair.dot_fname
 			this_dots = getRedDots(img_pair)
 			all_dots.append((this_dots, img_pair))
@@ -630,13 +639,24 @@ def computeRedDots(cal_file):
 		for d in dots:
 			dots_by_coord[d.coord].append((d, img_pair.rvec, img_pair.tvec))
 
-	for x, y in dots_by_coord:
+	all_dists = []
+	for x, y in sorted(dots_by_coord):
 		real_points = []
 		for d, rvec, tvec in dots_by_coord[(x, y)]:
-			real_point = unproject(np.array([list(d.center)]), np.array([0.0]), cal, rvec, tvec)[0]
+			image_points = np.array([list(d.center)])
+			z_values = np.array([0.0])
+
+			real_point = unproject(image_points, z_values, cal, rvec, tvec)[0]
 			real_points.append(real_point)
 
-		print real_points
+		# Calculate "average" point
+
+		avg_point = sum(real_points) / len(real_points)
+		dists = [math.sqrt(sum(pow(rv - av, 2.0) for rv, av in zip(rp, avg_point))) for rp in real_points]
+		all_dists += dists
+
+	print 'Max dist:', max(all_dists)
+	print 'Avg dist:', sum(all_dists) / len(all_dists)
 
 if __name__ == '__main__':
 	# computeAndSaveCalibration('data/1-11/', 'cal_data_1-11.txt')
@@ -644,6 +664,8 @@ if __name__ == '__main__':
 	computeRedDots('cal_data_1-11.txt')
 
 else:
+
+	cal, _ = inputCalibration('cal_data_1-11.txt')
 
 	# TMP
 	rvec = np.array([-0.43239601, 0.25603401, -3.08832021])
@@ -653,6 +675,9 @@ else:
 
 	image_points = projectSimp(init_points, cal, rvec, tvec)
 
+	print image_points
+
+	image_points = np.array([[100.0, 100.0],])
 	# print image_points
 
 	z_values = np.array([p[2] for p in init_points])
