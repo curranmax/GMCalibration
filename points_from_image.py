@@ -68,6 +68,9 @@ def outputCalibration(cal, image_pairs, fname):
 		else:
 			f.write(','.join(map(str, ip.tvec.flatten())))
 
+		if len(ip.missing_dots) > 0:
+			f.write(' missing_dots:' + ';'.join(map(lambda x: str(x[0]) + ',' + str(x[1]), ip.missing_dots)))
+
 		f.write('\n')
 
 	f.close()
@@ -91,6 +94,7 @@ def inputCalibration(fname):
 			filter_fname = None
 			tvec = None
 			rvec = None
+			missing_dots = []
 			for k, v in map(lambda x: x.split(':'), spl):
 				if k == 'cal_fname':
 					cal_fname = v
@@ -104,11 +108,14 @@ def inputCalibration(fname):
 				if k == 'rvec':
 					if v != 'None':
 						rvec = np.array([[x] for x in map(float, v.split(','))])
+				if k == 'missing_dots':
+					missing_dots = map(lambda x: tuple(map(int, x.split(','))) ,v.split(';'))
 			
 			img = ImagePair(cal_fname, dot_fname)
 			img.filter_fname = filter_fname
 			img.tvec = tvec
 			img.rvec = rvec
+			img.missing_dots = missing_dots
 
 			imgs.append(img)
 		else:
@@ -131,6 +138,8 @@ class ImagePair:
 
 		self.tvec = None
 		self.rvec = None
+
+		self.missing_dots = []
 
 def getImagePairs(folder):
 	fnames = defaultdict(list)
@@ -155,7 +164,6 @@ def getImagePairs(folder):
 			continue
 		image_pairs.append(ImagePair(cal_fname, dot_fname))
 	return image_pairs
-
 
 sample_image_fnames = ['data/sample/left01.jpg', 'data/sample/left02.jpg', 'data/sample/left03.jpg',
 					   'data/sample/left04.jpg', 'data/sample/left05.jpg', 'data/sample/left06.jpg',
@@ -364,6 +372,9 @@ class Dot:
 		self.pixels = set()
 		self.center = None
 
+		self.coord = None
+		self.gm_vals = None
+
 	def forceAdd(self, x, y):
 		self.pixels.add((x, y))
 
@@ -448,12 +459,13 @@ def getRedDots(img_pair):
 	sorted_dots.sort(key = lambda x: x.size(), reverse = True)
 
 	cl_dots = sorted_dots[:num_center_line]
+	other_dots = sorted_dots[num_center_line:]
 
 	# Separate into two groups with exactly one dot in both, s.t. each group are close to co-linear
-	_, min_h_cl_dot = min((d.center[0], d) for d in cl_dots)
-	_, max_h_cl_dot = max((d.center[0], d) for d in cl_dots)
-	_, min_v_cl_dot = min((d.center[1], d) for d in cl_dots)
-	_, max_v_cl_dot = max((d.center[1], d) for d in cl_dots)
+	_, min_v_cl_dot = min((d.center[0], d) for d in cl_dots)
+	_, max_v_cl_dot = max((d.center[0], d) for d in cl_dots)
+	_, min_h_cl_dot = min((d.center[1], d) for d in cl_dots)
+	_, max_h_cl_dot = max((d.center[1], d) for d in cl_dots)
 	
 	# Find "origin" dot, by finding the intersection between the lines form between the min and max points of each direction.
 	hm = (max_h_cl_dot.center[0] - min_h_cl_dot.center[0], max_h_cl_dot.center[1] - min_h_cl_dot.center[1])
@@ -480,6 +492,7 @@ def getRedDots(img_pair):
 			min_dist = this_dist
 			origin_dot  = d
 
+	# Find the vertical and horizontal axises
 	vdots = []
 	hdots = []
 
@@ -497,31 +510,97 @@ def getRedDots(img_pair):
 		elif vd < hd:
 			vdots.append((d, vt))
 
-	tmp_img = np.zeros((height, width, 3), np.uint8)
-	for hd, _ in hdots:
-		for x, y in hd.pixels:
-			tmp_img[x][y] = [0, 255, 0]
+	# Assign coordinates to vdots and hdots
+	hdots.sort(key = lambda x: x[1])
+	hdots = [hd for hd, _ in hdots]
 
-	for he in [min_h_cl_dot, max_h_cl_dot]:
-		for x, y in he.pixels:
-			tmp_img[x][y] = [0, 255, 255]
+	vdots.sort(key = lambda x: x[1])
+	vdots = [vd for vd, _ in vdots]
 
-	for vd, _ in vdots:
-		for x, y in vd.pixels:
-			tmp_img[x][y] = [255, 0, 0]
+	h_origin_index = hdots.index(origin_dot)
+	v_origin_index = vdots.index(origin_dot)
 
-	for ve in [min_v_cl_dot, max_v_cl_dot]:
-		for x, y in ve.pixels:
-			tmp_img[x][y] = [255, 0, 255]
+	for i, hd in enumerate(hdots):
+		hd.coord = (i - h_origin_index, 0)
 
-	for x, y in origin_dot.pixels:
-		tmp_img[x][y] = [255, 255, 255]
+	for i, vd in enumerate(vdots):
+		vd.coord = (0, i - v_origin_index)
 
-	cv2.imwrite('tmp.jpg', tmp_img)
+	# Find the coordinates of the other dots
+	min_h, max_h = min(hd.coord[0] for hd in hdots), max(hd.coord[0] for hd in hdots)
+	min_v, max_v = min(vd.coord[1] for vd in vdots), max(vd.coord[1] for vd in vdots)
+
+	dots_by_coord = {(x, y): None for x in xrange(min_h, max_h + 1) for y in xrange(min_v, max_v + 1)}
+	for d in hdots + vdots:
+		dots_by_coord[d.coord] = d
+
+	# TODO make this save with the image_pairs
+	missing_dots = img_pair.missing_dots
+
+	spiral_search =  sorted(dots_by_coord.keys(), key = lambda c: pow(c[0], 2) + pow(c[1], 2))
+
+	for x, y in spiral_search:
+		if dots_by_coord[(x, y)] != None or (x, y) in missing_dots:
+			continue
+
+		for ax, ay in spiral_search:
+			bx = x - ax
+			by = y - ay
+
+			if (ax, ay) in dots_by_coord and dots_by_coord[(ax, ay)] != None and (bx, by) in dots_by_coord and dots_by_coord[(bx, by)] != None:
+				break
+
+		approx_px = origin_dot.center[0] + (dots_by_coord[(ax, ay)].center[0] - origin_dot.center[0]) + (dots_by_coord[(bx, by)].center[0] - origin_dot.center[0])
+		approx_py = origin_dot.center[1] + (dots_by_coord[(ax, ay)].center[1] - origin_dot.center[1]) + (dots_by_coord[(bx, by)].center[1] - origin_dot.center[1])
+
+		min_dist = None
+		min_dot  = None
+
+		for d in other_dots:
+			this_dist = math.sqrt(pow(d.center[0] - approx_px, 2) + pow(d.center[1] - approx_py, 2))
+			if min_dist == None or this_dist < min_dist:
+				min_dist = this_dist
+				min_dot = d
+
+		min_dot.coord = (x, y)
+		dots_by_coord[(x, y)] = min_dot
+		other_dots.remove(min_dot)
+
+	for d in dots:
+		d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
+
+	# Temporarily draw image for debugging purposes
+	# tmp_img = np.zeros((height, width, 3), np.uint8)
+	# for (x, y) in dots_by_coord:
+	# 	d = dots_by_coord[(x, y)]
+	# 	if d == None:
+	# 		print 'Skipping: (' + str(x) + ', ' + str(y) + ')'
+	# 		continue
+
+	# 	if y == 4:
+	# 		c = [0, 0, 255]
+	# 	else:
+	# 		c = [0, 0, 0]
+
+	# 	for x, y in d.pixels:
+	# 		tmp_img[x][y] = c
+
+
+
+	# for hd in hdots:
+	# 	for x, y in hd.pixels:
+	# 		tmp_img[x][y] = [255, 0, 0]
+
+	# for vd in vdots:
+	# 	for x, y in vd.pixels:
+	# 		tmp_img[x][y] = [0, 255, 0]
+
+	# for x, y in origin_dot.pixels:
+	# 	tmp_img[x][y] = [255, 255, 255]
+
+	# cv2.imwrite('tmp.jpg', tmp_img)
 
 	return dots
-
-
 
 def computeAndSaveCalibration(image_folder, output_file):
 	image_pairs = getImagePairs(image_folder)
@@ -534,15 +613,30 @@ def computeAndSaveCalibration(image_folder, output_file):
 def computeRedDots(cal_file):
 	cal, image_pairs = inputCalibration(cal_file)
 
+	all_dots = []
 	for img_pair in image_pairs:
 		if img_pair.filter_fname == None:
 			getRedFilter(img_pair)
 
-		getRedDots(img_pair)
-
-		break
+		if img_pair.filter_fname != None and img_pair.filter_fname in ['data/1-11/filter_1.jpg', 'data/1-11/filter_2.jpg', 'data/1-11/filter_4.jpg']:
+			print 'Getting Red Dots for image', img_pair.dot_fname
+			this_dots = getRedDots(img_pair)
+			all_dots.append((this_dots, img_pair))
 
 	outputCalibration(cal, image_pairs, cal_file)
+
+	dots_by_coord = defaultdict(list)
+	for dots, img_pair in all_dots:
+		for d in dots:
+			dots_by_coord[d.coord].append((d, img_pair.rvec, img_pair.tvec))
+
+	for x, y in dots_by_coord:
+		real_points = []
+		for d, rvec, tvec in dots_by_coord[(x, y)]:
+			real_point = unproject(np.array([list(d.center)]), np.array([0.0]), cal, rvec, tvec)[0]
+			real_points.append(real_point)
+
+		print real_points
 
 if __name__ == '__main__':
 	# computeAndSaveCalibration('data/1-11/', 'cal_data_1-11.txt')
