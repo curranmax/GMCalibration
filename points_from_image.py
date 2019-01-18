@@ -144,9 +144,11 @@ class ImagePair:
 def getImagePairs(folder):
 	fnames = defaultdict(list)
 	for f in os.listdir(folder):
+		token = f[:f.find('_')]
 		n = int(f[f.find('_') + 1 : f.find('.')])
 
-		fnames[n].append(f)
+		if token in ['cal', 'dot']:
+			fnames[n].append(f)
 
 	image_pairs = []
 	for k in fnames:
@@ -163,6 +165,7 @@ def getImagePairs(folder):
 		if cal_fname == None or dot_fname == None:
 			continue
 		image_pairs.append(ImagePair(cal_fname, dot_fname))
+
 	return image_pairs
 
 sample_image_fnames = ['data/sample/left01.jpg', 'data/sample/left02.jpg', 'data/sample/left03.jpg',
@@ -170,7 +173,7 @@ sample_image_fnames = ['data/sample/left01.jpg', 'data/sample/left02.jpg', 'data
 					   'data/sample/left07.jpg', 'data/sample/left08.jpg', 'data/sample/left12.jpg',
 					   'data/sample/left13.jpg', 'data/sample/left14.jpg']
 
-def calibrateCamera(image_pairs, show_images = False):
+def calibrateCamera(image_pairs, save_cal_images = True):
 	# Termination criteria
 	criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -199,17 +202,17 @@ def calibrateCamera(image_pairs, show_images = False):
 			obj_points.append(objp)
 			img_points.append(corners2)
 
-			if show_images:
+			if save_cal_images:
 				img = cv2.drawChessboardCorners(img, (6, 6), corners2, ret)
 
-				x, y, z = img.shape
-				img = cv2.resize(img, (int(x / 10), int(y / 10)))
+				d = os.path.dirname(ip.cal_fname)
 
-				cv2.imshow('img', img)
-				cv2.waitKey(500)
+				bn = os.path.basename(ip.cal_fname)
+				n = int(bn[bn.find('_') + 1:bn.find('.')])
 
-	if show_images:
-		cv2.destroyAllWindows()
+				cal_img_name = os.path.join(d, 'cal_img_' + str(n) + '.jpg')
+
+				cv2.imwrite(cal_img_name, img)
 
 	# ret - whethere the calibration was sucessful
 	# mtx - intrinsic camera matrix
@@ -619,15 +622,20 @@ def computeAndSaveCalibration(image_folder, output_file):
 
 	outputCalibration(cal, image_pairs, output_file)
 
+def computeRedFilter(cal_file):
+	cal, image_pairs = inputCalibration(cal_file)
+	for img_pair in image_pairs:
+		if img_pair.filter_fname == None:
+			getRedFilter(img_pair)
+
+	outputCalibration(cal, image_pairs, cal_file)
+
 def computeRedDots(cal_file):
 	cal, image_pairs = inputCalibration(cal_file)
 
 	all_dots = []
 	for img_pair in image_pairs:
-		if img_pair.filter_fname == None:
-			getRedFilter(img_pair)
-
-		if img_pair.filter_fname != None and img_pair.filter_fname != 'data/1-11/filter_15.jpg':
+		if img_pair.filter_fname != None and img_pair.filter_fname not in ['data/1-11/filter_6.jpg', 'data/1-11/filter_15.jpg']:
 			print 'Getting Red Dots for image', img_pair.dot_fname
 			this_dots = getRedDots(img_pair)
 			all_dots.append((this_dots, img_pair))
@@ -659,7 +667,9 @@ def computeRedDots(cal_file):
 	print 'Avg dist:', sum(all_dists) / len(all_dists)
 
 if __name__ == '__main__':
-	# computeAndSaveCalibration('data/1-11/', 'cal_data_1-11.txt')
+	# computeAndSaveCalibration('data/1-11/', 'cal_test.txt')
+
+	# computeRedFilter('cal_data_1-11.txt')
 
 	computeRedDots('cal_data_1-11.txt')
 
@@ -685,5 +695,3 @@ else:
 
 	print init_points[0]
 	print real_points[0]
-
-
