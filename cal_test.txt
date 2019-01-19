@@ -1,0 +1,24 @@
+fx 3412.75486581
+fy 3361.25681894
+cx 1770.05710806
+cy 884.464873945
+k1 -0.0938749495779
+k2 -0.0185288913386
+k3 0.0903071384718
+p1 -0.00151721566218
+p2 0.0202200940839
+img:1 cal_fname:data/1-11/cal_1.JPG dot_fname:data/1-11/dot_1.JPG filter_fname:data/1-11/filter_1.jpg rvec:-0.014550651289445398,-0.3431849590711066,1.5596721958324324 tvec:-13.04442576407544,8.503874832080896,49.61155505308985 missing_dots:-12,2;-12,-2
+img:2 cal_fname:data/1-11/cal_2.JPG dot_fname:data/1-11/dot_2.JPG filter_fname:data/1-11/filter_2.jpg rvec:-0.08109103366323224,-0.41478888656711643,1.53294589384723 tvec:-13.484309920074544,9.069998493062064,46.93246308710367 missing_dots:-12,2;-12,-2;-12,-4
+img:3 cal_fname:data/1-11/cal_3.JPG dot_fname:data/1-11/dot_3.JPG filter_fname:data/1-11/filter_3.jpg rvec:-0.24596887160353095,-0.5456120352959117,1.574237703628279 tvec:-12.123743023941323,9.246513490259812,46.858738613334495 missing_dots:-12,-2;-12,4;-11,4;-10,4
+img:4 cal_fname:data/1-11/cal_4.JPG dot_fname:data/1-11/dot_4.JPG filter_fname:data/1-11/filter_4.jpg rvec:-0.26087305154177337,-0.5759750973151555,1.5625920355914715 tvec:-13.938917681418658,8.846582769210196,46.190313223280995 missing_dots:-12,-2;-12,2;-12,4
+img:5 cal_fname:data/1-11/cal_5.JPG dot_fname:data/1-11/dot_5.JPG filter_fname:None rvec:None tvec:None missing_dots:-12,-2;-12,2;-12,4
+img:6 cal_fname:data/1-11/cal_6.JPG dot_fname:data/1-11/dot_6.JPG filter_fname:data/1-11/filter_6.jpg rvec:0.21805213231107026,-0.040795778852391495,-0.003930737232641384 tvec:-20.08148653588755,9.778676097021556,51.73494100572424 missing_dots:-12,-2
+img:7 cal_fname:data/1-11/cal_7.JPG dot_fname:data/1-11/dot_7.JPG filter_fname:data/1-11/filter_7.jpg rvec:0.026933252484173713,-0.30828951736222815,1.5465846939106338 tvec:-14.338635305313922,10.15311781063182,50.98489410370675 missing_dots:-12,-13;-12,-14;-12,-2;-12,2;-12,3
+img:8 cal_fname:data/1-11/cal_8.JPG dot_fname:data/1-11/dot_8.JPG filter_fname:data/1-11/filter_8.jpg rvec:-0.02229751731960051,-0.15594325656025487,1.5522016707887225 tvec:-15.125353878362413,8.64560183535246,53.537673643998566 missing_dots:-12,-2
+img:9 cal_fname:data/1-11/cal_9.JPG dot_fname:data/1-11/dot_9.JPG filter_fname:data/1-11/filter_9.jpg rvec:-0.2859617186345747,-0.4053843466926263,1.5133570937333822 tvec:-15.985286772652074,9.067598578371918,52.70556831240503 missing_dots:-12,-14;-12,-13;-12,-12;-12,-10;-12,-3;-12,-2;-12,1
+img:10 cal_fname:data/1-11/cal_10.JPG dot_fname:data/1-11/dot_10.JPG filter_fname:None rvec:None tvec:None missing_dots:-12,-14;-12,-13;-12,-12;-12,-10;-12,-2;-12,1
+img:11 cal_fname:data/1-11/cal_11.JPG dot_fname:data/1-11/dot_11.JPG filter_fname:None rvec:None tvec:None missing_dots:-12,-14;-12,-13;-12,-12;-12,-10;-12,-2;-12,1
+img:12 cal_fname:data/1-11/cal_12.JPG dot_fname:data/1-11/dot_12.JPG filter_fname:None rvec:None tvec:None missing_dots:-12,-14;-12,-13;-12,-12;-12,-10;-12,-2;-12,1
+img:13 cal_fname:data/1-11/cal_13.JPG dot_fname:data/1-11/dot_13.JPG filter_fname:None rvec:None tvec:None missing_dots:-12,-14;-12,-13;-12,-12;-12,-10;-12,-2;-12,1
+img:14 cal_fname:data/1-11/cal_14.JPG dot_fname:data/1-11/dot_14.JPG filter_fname:None rvec:None tvec:None missing_dots:-12,-14;-12,-13;-12,-12;-12,-10;-12,-2;-12,1
+img:15 cal_fname:data/1-11/cal_15.JPG dot_fname:data/1-11/dot_15.JPG filter_fname:data/1-11/filter_15.jpg rvec:-0.38188660380001216,0.2116512648556659,-1.5983885962967481 tvec:-25.370836565817722,15.437783517117749,51.752146544023795 missing_dots:-12,-14;-12,-12;-12,-10;-12,-2;-12,2;-12,4;-11,4;-10,4;-9,4;-8,4;-7,4;-6,3;-6,4;-5,3;-5,4;-4,3;-4,4;-3,3;-3,4;-2,3;-2,4;-1,3;-1,4;0,3;0,4;1,3;1,4;2,3;2,4;3,3;3,4;4,3;4,4;5,3;5,4;6,2;6,3;6,4;7,2;7,3;7,4;8,2;8,3;8,4;7,-14;8,-14

@@ -195,12 +195,13 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 		ret, corners = cv2.findChessboardCorners(gray, (6, 6), None)
 
 		if ret == True:
-			working_inds.append(i)
-
 			corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
 
-			obj_points.append(objp)
-			img_points.append(corners2)
+			if ip.cal_fname != 'data/1-11/cal_6.JPG':
+				working_inds.append(i)
+				
+				obj_points.append(objp)
+				img_points.append(corners2)
 
 			if save_cal_images:
 				img = cv2.drawChessboardCorners(img, (6, 6), corners2, ret)
@@ -210,7 +211,7 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 				bn = os.path.basename(ip.cal_fname)
 				n = int(bn[bn.find('_') + 1:bn.find('.')])
 
-				cal_img_name = os.path.join(d, 'cal_img_' + str(n) + '.jpg')
+				cal_img_name = os.path.join(d, 'calimg_' + str(n) + '.jpg')
 
 				cv2.imwrite(cal_img_name, img)
 
@@ -640,14 +641,13 @@ def computeRedDots(cal_file):
 			this_dots = getRedDots(img_pair)
 			all_dots.append((this_dots, img_pair))
 
-	outputCalibration(cal, image_pairs, cal_file)
-
 	dots_by_coord = defaultdict(list)
 	for dots, img_pair in all_dots:
 		for d in dots:
 			dots_by_coord[d.coord].append((d, img_pair.rvec, img_pair.tvec))
 
 	all_dists = []
+	dists_by_coord = defaultdict(list)
 	for x, y in sorted(dots_by_coord):
 		real_points = []
 		for d, rvec, tvec in dots_by_coord[(x, y)]:
@@ -662,36 +662,27 @@ def computeRedDots(cal_file):
 		avg_point = sum(real_points) / len(real_points)
 		dists = [math.sqrt(sum(pow(rv - av, 2.0) for rv, av in zip(rp, avg_point))) for rp in real_points]
 		all_dists += dists
+		dists_by_coord[(x, y)] = sum(dists) / len(dists)
 
 	print 'Max dist:', max(all_dists)
 	print 'Avg dist:', sum(all_dists) / len(all_dists)
 
+	print 'Worsts Coords:', sorted(((x, y, dists_by_coord[(x, y)]) for x, y in dists_by_coord), key = lambda v: v[2], reverse = True)[:5]
+
 if __name__ == '__main__':
-	# computeAndSaveCalibration('data/1-11/', 'cal_test.txt')
+	data_folder = 'data/1-11/'
+	save_file = 'cal_data_1-11.txt'
 
-	# computeRedFilter('cal_data_1-11.txt')
+	# 1) Compute the camera caliibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
+	# computeAndSaveCalibration(data_folder, save_file)
 
-	computeRedDots('cal_data_1-11.txt')
+	# 2) Computes the filter images.
+	# computeRedFilter(save_file)
 
-else:
+	# After computing the filter images, you may have to manually:
+	#	a) Remove anything that isn't a laser dot
+	#	b) Add "missing_dots" entry to save_file. This is any dot that isn't visible in the filter image. See 'cal_test.txt' for details.
+	#	c) Increase the size of the "median" dots
 
-	cal, _ = inputCalibration('cal_data_1-11.txt')
-
-	# TMP
-	rvec = np.array([-0.43239601, 0.25603401, -3.08832021])
-	tvec = np.array([3.79739158, 0.89895019, 14.85930553])
-
-	init_points = np.array([[0.5, 0.75, 1.0],])
-
-	image_points = projectSimp(init_points, cal, rvec, tvec)
-
-	print image_points
-
-	image_points = np.array([[100.0, 100.0],])
-	# print image_points
-
-	z_values = np.array([p[2] for p in init_points])
-	real_points = unproject(image_points, z_values, cal, rvec, tvec)
-
-	print init_points[0]
-	print real_points[0]
+	# 3) Find the Red Dots.
+	computeRedDots(save_file)
