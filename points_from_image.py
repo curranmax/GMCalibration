@@ -194,6 +194,25 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 		# Find the corners
 		ret, corners = cv2.findChessboardCorners(gray, (6, 6), None)
 
+		print img.shape
+		# 4, 5, 8, 9, 10
+		if ip.cal_fname in ['data/1-18/cal_4.JPG', 'data/1-18/cal_5.JPG', 'data/1-18/cal_8.JPG','data/1-18/cal_9.JPG', 'data/1-18/cal_10.JPG']:
+			grid_corners = dict()
+			for i, c in enumerate(corners):
+				x = i % 6
+				y = int(i / 6)
+
+				# print x, y, i, c
+				grid_corners[(x, y)] = c
+
+			new_corners = []
+			for x in xrange(0, 6, 1):
+				for y in xrange(5, -1, -1):
+					# print x, y
+					new_corners.append(grid_corners[(x, y)])
+
+			corners = np.array(new_corners)
+
 		if ret == True:
 			corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
 
@@ -670,11 +689,11 @@ def computeRedDots(cal_file):
 	print 'Worsts Coords:', sorted(((x, y, dists_by_coord[(x, y)]) for x, y in dists_by_coord), key = lambda v: v[2], reverse = True)[:5]
 
 if __name__ == '__main__':
-	data_folder = 'data/1-11/'
-	save_file = 'cal_data_1-11.txt'
+	data_folder = 'data/1-18/'
+	save_file = 'cal_data_1-18.txt'
 
 	# 1) Compute the camera caliibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
-	# computeAndSaveCalibration(data_folder, save_file)
+	computeAndSaveCalibration(data_folder, save_file)
 
 	# 2) Computes the filter images.
 	# computeRedFilter(save_file)
@@ -685,4 +704,4 @@ if __name__ == '__main__':
 	#	c) Increase the size of the "median" dots
 
 	# 3) Find the Red Dots.
-	computeRedDots(save_file)
+	# computeRedDots(save_file)
