@@ -602,14 +602,14 @@ def getRedDots(img_pair):
 		dots_by_coord[(x, y)] = min_dot
 		other_dots.remove(min_dot)
 
-	# # Calculates the gm_vals for each dot
-	# for d in dots:
-	# 	d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
+	# Calculates the gm_vals for each dot
+	for d in dots:
+		d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
 
-	# # Checks that all dots have coord and gm_vals set
-	# for d in dots:
-	# 	if d.gm_vals is None or d.coord is None:
-	# 		raise Exception('Didn\'t set the coordinates/gm_vals of a dot')
+	# Checks that all dots have coord and gm_vals set
+	for d in dots:
+		if d.gm_vals is None or d.coord is None:
+			raise Exception('Didn\'t set the coordinates/gm_vals of a dot')
 
 	# Temporarily draw image for debugging purposes
 	tmp_img = np.zeros((height, width, 3), np.uint8)
@@ -638,8 +638,6 @@ def getRedDots(img_pair):
 
 	cv2.imwrite('tmp.jpg', tmp_img)
 
-	raise Exception('Quit')
-
 	return dots
 
 def computeAndSaveCalibration(image_folder, output_file):
@@ -662,7 +660,7 @@ def computeRedDots(cal_file):
 	cal, image_pairs = inputCalibration(cal_file)
 
 	all_dots = []
-	for img_pair in image_pairs:
+	for img_pair in image_pairs[:2]:
 		if img_pair.filter_fname != None and img_pair.filter_fname not in ['data/1-11/filter_6.jpg', 'data/1-11/filter_15.jpg']:
 			print 'Getting Red Dots for image', img_pair.dot_fname
 			this_dots = getRedDots(img_pair)
