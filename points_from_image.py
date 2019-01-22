@@ -185,8 +185,8 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 
 	working_inds = []
 
-	for i, ip in enumerate(image_pairs):
-		print 'Running image', i + 1, 'of', len(image_pairs)
+	for ip_ind, ip in enumerate(image_pairs):
+		print 'Running image', ip_ind + 1, 'of', len(image_pairs)
 
 		img = cv2.imread(ip.cal_fname)
 		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -194,21 +194,19 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 		# Find the corners
 		ret, corners = cv2.findChessboardCorners(gray, (6, 6), None)
 
-		print img.shape
-		# 4, 5, 8, 9, 10
-		if ip.cal_fname in ['data/1-18/cal_4.JPG', 'data/1-18/cal_5.JPG', 'data/1-18/cal_8.JPG','data/1-18/cal_9.JPG', 'data/1-18/cal_10.JPG']:
+		# Changes the order of the corners for these images to match the others
+		if ip.cal_fname in ['data/1-18/cal_4.JPG', 'data/1-18/cal_5.JPG', 'data/1-18/cal_8.JPG','data/1-18/cal_9.JPG', 'data/1-18/cal_10.JPG',
+				'data/1-21/cal_15.JPG', 'data/1-21/cal_7.JPG', 'data/1-21/cal_8.JPG']:
 			grid_corners = dict()
 			for i, c in enumerate(corners):
 				x = i % 6
 				y = int(i / 6)
 
-				# print x, y, i, c
 				grid_corners[(x, y)] = c
 
 			new_corners = []
 			for x in xrange(0, 6, 1):
 				for y in xrange(5, -1, -1):
-					# print x, y
 					new_corners.append(grid_corners[(x, y)])
 
 			corners = np.array(new_corners)
@@ -216,11 +214,10 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 		if ret == True:
 			corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
 
-			if ip.cal_fname != 'data/1-11/cal_6.JPG':
-				working_inds.append(i)
-				
-				obj_points.append(objp)
-				img_points.append(corners2)
+			working_inds.append(ip_ind)
+			
+			obj_points.append(objp)
+			img_points.append(corners2)
 
 			if save_cal_images:
 				img = cv2.drawChessboardCorners(img, (6, 6), corners2, ret)
@@ -689,14 +686,14 @@ def computeRedDots(cal_file):
 	print 'Worsts Coords:', sorted(((x, y, dists_by_coord[(x, y)]) for x, y in dists_by_coord), key = lambda v: v[2], reverse = True)[:5]
 
 if __name__ == '__main__':
-	data_folder = 'data/1-18/'
-	save_file = 'cal_data_1-18.txt'
+	data_folder = 'data/1-21/'
+	save_file = 'cal_data_1-21.txt'
 
 	# 1) Compute the camera caliibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
 	computeAndSaveCalibration(data_folder, save_file)
 
 	# 2) Computes the filter images.
-	# computeRedFilter(save_file)
+	computeRedFilter(save_file)
 
 	# After computing the filter images, you may have to manually:
 	#	a) Remove anything that isn't a laser dot
