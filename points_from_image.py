@@ -473,10 +473,26 @@ def getRedDots(img_pair):
 
 		dot.center = map(float, bright_pixel)
 
-	# Find the center line dots (a dot where one of the GMs is set to 2^15)
-	# We purposefully had the GM stay on these for longer, so they are brighter/bigger
-	num_center_line = 19 + 21 - 1
+	missing_dots = img_pair.missing_dots
 
+	min_h, max_h = -12, 8
+	min_v, max_v = -14, 4
+
+	valid_dot_coords = []
+	num_center_line = 0
+	for h in xrange(min_h, max_h + 1):
+		for v in xrange(min_v, max_v + 1):
+
+			if (h, v) not in missing_dots:
+				valid_dot_coords.append((h, v))
+
+				if h == 0 or v == 0:
+					num_center_line += 1
+
+	if len(valid_dot_coords) != len(dots):
+		raise Exception('Mismatching number of dots and coords')
+
+	# Find the "median" dots to form the axis
 	sorted_dots = list(dots)
 	sorted_dots.sort(key = lambda x: x.size(), reverse = True)
 
@@ -549,22 +565,15 @@ def getRedDots(img_pair):
 		vd.coord = (0, i - v_origin_index)
 
 	# Find the coordinates of the other dots
-	min_h, max_h = min(hd.coord[0] for hd in hdots), max(hd.coord[0] for hd in hdots)
-	min_v, max_v = min(vd.coord[1] for vd in vdots), max(vd.coord[1] for vd in vdots)
 
-	dots_by_coord = {(x, y): None for x in xrange(min_h, max_h + 1) for y in xrange(min_v, max_v + 1)}
+	dots_by_coord = {(x, y): None for x, y in valid_dot_coords}
 	for d in hdots + vdots:
 		dots_by_coord[d.coord] = d
 
-	# TODO make this save with the image_pairs
-	missing_dots = img_pair.missing_dots
-
 	spiral_search =  sorted(dots_by_coord.keys(), key = lambda c: pow(c[0], 2) + pow(c[1], 2))
 
-	# print len(dots), (max_h - min_h + 1) * (max_v - min_v + 1) - len(missing_dots)
-
 	for x, y in spiral_search:
-		if dots_by_coord[(x, y)] != None or (x, y) in missing_dots:
+		if (x, y) not in dots_by_coord or dots_by_coord[(x, y)] != None:
 			continue
 
 		for ax, ay in spiral_search:
@@ -593,41 +602,43 @@ def getRedDots(img_pair):
 		dots_by_coord[(x, y)] = min_dot
 		other_dots.remove(min_dot)
 
-	# Calculates the gm_vals for each dot
-	for d in dots:
-		d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
+	# # Calculates the gm_vals for each dot
+	# for d in dots:
+	# 	d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
 
-	# Checks that all dots have coord and gm_vals set
-	for d in dots:
-		if d.gm_vals is None or d.coord is None:
-			raise Exception('Didn\'t set the coordinates/gm_vals of a dot')
+	# # Checks that all dots have coord and gm_vals set
+	# for d in dots:
+	# 	if d.gm_vals is None or d.coord is None:
+	# 		raise Exception('Didn\'t set the coordinates/gm_vals of a dot')
 
 	# Temporarily draw image for debugging purposes
-	# tmp_img = np.zeros((height, width, 3), np.uint8)
-	# for (x, y) in dots_by_coord:
-	# 	d = dots_by_coord[(x, y)]
-	# 	if d == None:
-	# 		print 'Skipping: (' + str(x) + ', ' + str(y) + ')'
-	# 		continue
-	# 	if y == 4:
-	# 		c = [0, 0, 255]
-	# 	else:
-	# 		c = [0, 0, 0]
-	# 	for x, y in d.pixels:
-	# 		tmp_img[x][y] = c
+	tmp_img = np.zeros((height, width, 3), np.uint8)
+	for (x, y) in dots_by_coord:
+		d = dots_by_coord[(x, y)]
+		if d == None:
+			print 'Skipping: (' + str(x) + ', ' + str(y) + ')'
+			continue
+		if y == 3:
+			c = [0, 0, 255]
+		else:
+			c = [0, 0, 0]
+		for x, y in d.pixels:
+			tmp_img[x][y] = c
 
-	# for hd in hdots:
-	# 	for x, y in hd.pixels:
-	# 		tmp_img[x][y] = [255, 0, 0]
+	for hd in hdots:
+		for x, y in hd.pixels:
+			tmp_img[x][y] = [255, 0, 0]
 
-	# for vd in vdots:
-	# 	for x, y in vd.pixels:
-	# 		tmp_img[x][y] = [0, 255, 0]
+	for vd in vdots:
+		for x, y in vd.pixels:
+			tmp_img[x][y] = [0, 255, 0]
 
-	# for x, y in origin_dot.pixels:
-	# 	tmp_img[x][y] = [255, 255, 255]
+	for x, y in origin_dot.pixels:
+		tmp_img[x][y] = [255, 255, 255]
 
-	# cv2.imwrite('tmp.jpg', tmp_img)
+	cv2.imwrite('tmp.jpg', tmp_img)
+
+	raise Exception('Quit')
 
 	return dots
 
@@ -690,10 +701,10 @@ if __name__ == '__main__':
 	save_file = 'cal_data_1-21.txt'
 
 	# 1) Compute the camera caliibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
-	computeAndSaveCalibration(data_folder, save_file)
+	# computeAndSaveCalibration(data_folder, save_file)
 
 	# 2) Computes the filter images.
-	computeRedFilter(save_file)
+	# computeRedFilter(save_file)
 
 	# After computing the filter images, you may have to manually:
 	#	a) Remove anything that isn't a laser dot
@@ -701,4 +712,4 @@ if __name__ == '__main__':
 	#	c) Increase the size of the "median" dots
 
 	# 3) Find the Red Dots.
-	# computeRedDots(save_file)
+	computeRedDots(save_file)
