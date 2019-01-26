@@ -50,7 +50,10 @@ def outputCalibration(cal, image_pairs, fname):
 		f.write(' cal_fname:' + str(ip.cal_fname))
 
 		# dot_fname
-		f.write(' dot_fname:' + str(ip.dot_fname))
+		if ip.dot_fname is None:
+			f.write(' dot_fname:None')
+		else:
+			f.write(' dot_fname:' + str(ip.dot_fname))
 
 		f.write(' filter_fname:' + str(ip.filter_fname))
 
@@ -98,7 +101,7 @@ def inputCalibration(fname):
 			for k, v in map(lambda x: x.split(':'), spl):
 				if k == 'cal_fname':
 					cal_fname = v
-				if k == 'dot_fname':
+				if k == 'dot_fname' and v != 'None':
 					dot_fname = v
 				if k == 'filter_fname' and v != 'None':
 					filter_fname = v
@@ -144,6 +147,8 @@ class ImagePair:
 def getImagePairs(folder):
 	fnames = defaultdict(list)
 	for f in os.listdir(folder):
+		if '_' not in f and '.' not in f:
+			continue
 		token = f[:f.find('_')]
 		n = int(f[f.find('_') + 1 : f.find('.')])
 
@@ -152,9 +157,6 @@ def getImagePairs(folder):
 
 	image_pairs = []
 	for k in fnames:
-		if len(fnames[k]) != 2:
-			continue
-
 		cal_fname, dot_fname = None, None
 		for fname in fnames[k]:
 			if 'cal' == fname[:3]:
@@ -162,16 +164,12 @@ def getImagePairs(folder):
 			if 'dot' == fname[:3]:
 				dot_fname = os.path.join(folder, fname)
 
-		if cal_fname == None or dot_fname == None:
+		if cal_fname == None:
 			continue
 		image_pairs.append(ImagePair(cal_fname, dot_fname))
+		print cal_fname, dot_fname
 
 	return image_pairs
-
-sample_image_fnames = ['data/sample/left01.jpg', 'data/sample/left02.jpg', 'data/sample/left03.jpg',
-					   'data/sample/left04.jpg', 'data/sample/left05.jpg', 'data/sample/left06.jpg',
-					   'data/sample/left07.jpg', 'data/sample/left08.jpg', 'data/sample/left12.jpg',
-					   'data/sample/left13.jpg', 'data/sample/left14.jpg']
 
 def calibrateCamera(image_pairs, save_cal_images = True):
 	# Termination criteria
@@ -236,7 +234,7 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 	# dist - distortion parameters
 	# rvecs - rotation vectors for each image
 	# tvecs - translation vectors for each image
-	ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray.shape[::-1], None, None)
+	ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray.shape[::-1], None, None, criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10000000, 0.00000001))
 
 	fx = mtx[0][0]
 	fy = mtx[1][1]
@@ -490,6 +488,7 @@ def getRedDots(img_pair):
 					num_center_line += 1
 
 	if len(valid_dot_coords) != len(dots):
+		print len(valid_dot_coords), len(dots)
 		raise Exception('Mismatching number of dots and coords')
 
 	# Find the "median" dots to form the axis
@@ -565,7 +564,6 @@ def getRedDots(img_pair):
 		vd.coord = (0, i - v_origin_index)
 
 	# Find the coordinates of the other dots
-
 	dots_by_coord = {(x, y): None for x, y in valid_dot_coords}
 	for d in hdots + vdots:
 		dots_by_coord[d.coord] = d
@@ -660,8 +658,8 @@ def computeRedDots(cal_file):
 	cal, image_pairs = inputCalibration(cal_file)
 
 	all_dots = []
-	for img_pair in image_pairs[:2]:
-		if img_pair.filter_fname != None and img_pair.filter_fname not in ['data/1-11/filter_6.jpg', 'data/1-11/filter_15.jpg']:
+	for img_pair in image_pairs[:8]:
+		if img_pair.filter_fname != None and img_pair.filter_fname not in ['data/1-11/filter_6.jpg', 'data/1-11/filter_15.jpg', 'data/1-21/filter_7.jpg']:
 			print 'Getting Red Dots for image', img_pair.dot_fname
 			this_dots = getRedDots(img_pair)
 			all_dots.append((this_dots, img_pair))
@@ -695,11 +693,11 @@ def computeRedDots(cal_file):
 	print 'Worsts Coords:', sorted(((x, y, dists_by_coord[(x, y)]) for x, y in dists_by_coord), key = lambda v: v[2], reverse = True)[:5]
 
 if __name__ == '__main__':
-	data_folder = 'data/1-21/'
-	save_file = 'cal_data_1-21.txt'
+	data_folder = 'data/1-25/'
+	save_file = 'cal_data_1-25.txt'
 
 	# 1) Compute the camera caliibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
-	# computeAndSaveCalibration(data_folder, save_file)
+	computeAndSaveCalibration(data_folder, save_file)
 
 	# 2) Computes the filter images.
 	# computeRedFilter(save_file)
