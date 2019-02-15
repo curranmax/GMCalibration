@@ -6,9 +6,15 @@ import math
 import os
 from collections import defaultdict
 import itertools
+from datetime import datetime
+
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
+import matplotlib.pyplot as plt
+from matplotlib import cm
 
 class CameraCalibration:
-	def __init__(self, fx, fy, cx, cy, k1, k2, k3, p1, p2):
+	def __init__(self, fx, fy, cx, cy, k1, k2, k3, p1, p2, ufx = None, ufy = None, ucx = None, ucy = None):
 		self.fx = fx
 		self.fy = fy
 		self.cx = cx
@@ -20,6 +26,11 @@ class CameraCalibration:
 
 		self.p1 = p1
 		self.p2 = p2
+
+		self.ufx = ufx
+		self.ufy = ufy
+		self.ucx = ucx
+		self.ucy = ucy
 
 	def npArrays(self):
 		mtx = np.array([[self.fx, 0.0, self.cx], [0.0, self.fy, self.cy], [0.0, 0.0, 1.0]])
@@ -43,6 +54,15 @@ def outputCalibration(cal, image_pairs, fname):
 	f.write('p1 ' + str(cal.p1) + '\n')
 	f.write('p2 ' + str(cal.p2) + '\n')
 
+	if cal.ufx != None:
+		f.write('ufx ' + str(cal.ufx) + '\n')
+	if cal.ufy != None:
+		f.write('ufy ' + str(cal.ufy) + '\n')
+	if cal.ucx != None:
+		f.write('ucx ' + str(cal.ucx) + '\n')
+	if cal.ucy != None:
+		f.write('ucy ' + str(cal.ucy) + '\n')
+
 	for i, ip in enumerate(image_pairs):
 		f.write('img:' + str(i + 1))
 
@@ -55,7 +75,20 @@ def outputCalibration(cal, image_pairs, fname):
 		else:
 			f.write(' dot_fname:' + str(ip.dot_fname))
 
-		f.write(' filter_fname:' + str(ip.filter_fname))
+		if ip.filter_fname is None:
+			f.write(' filter_fname:None')
+		else:
+			f.write(' filter_fname:' + str(ip.filter_fname))
+
+		if ip.ufilter_fname is None:
+			f.write(' ufilter_fname:None')
+		else:
+			f.write(' ufilter_fname:' + str(ip.ufilter_fname))
+
+		if ip.saved_dots_fname is None:
+			f.write(' saved_dots_fname:None')
+		else:
+			f.write(' saved_dots_fname:' + str(ip.saved_dots_fname))
 
 		# rvec
 		f.write(' rvec:')
@@ -74,6 +107,9 @@ def outputCalibration(cal, image_pairs, fname):
 		if len(ip.missing_dots) > 0:
 			f.write(' missing_dots:' + ';'.join(map(lambda x: str(x[0]) + ',' + str(x[1]), ip.missing_dots)))
 
+		if len(ip.umissing_dots) > 0:
+			f.write(' umissing_dots:' + ';'.join(map(lambda x: str(x[0]) + ',' + str(x[1]), ip.umissing_dots)))
+
 		f.write('\n')
 
 	f.close()
@@ -81,7 +117,7 @@ def outputCalibration(cal, image_pairs, fname):
 def inputCalibration(fname):
 	f = open(fname, 'r')
 
-	vals = {'fx': None, 'fy': None, 'cx': None, 'cy': None, 'k1': None, 'k2': None, 'k3': None, 'p1': None, 'p2': None}
+	vals = {'fx': None, 'fy': None, 'cx': None, 'cy': None, 'k1': None, 'k2': None, 'k3': None, 'p1': None, 'p2': None, 'ufx': None, 'ufy': None, 'ucx': None, 'ucy': None}
 	imgs = []
 
 	for line in f:
@@ -95,9 +131,12 @@ def inputCalibration(fname):
 			cal_fname = None
 			dot_fname = None
 			filter_fname = None
+			ufilter_fname = None
+			saved_dots_fname = None
 			tvec = None
 			rvec = None
 			missing_dots = []
+			umissing_dots = []
 			for k, v in map(lambda x: x.split(':'), spl):
 				if k == 'cal_fname':
 					cal_fname = v
@@ -105,6 +144,10 @@ def inputCalibration(fname):
 					dot_fname = v
 				if k == 'filter_fname' and v != 'None':
 					filter_fname = v
+				if k == 'ufilter_fname' and v != 'None':
+					ufilter_fname = v
+				if k == 'saved_dots_fname' and v != 'None':
+					saved_dots_fname = v
 				if k == 'tvec':
 					if v != 'None':
 						tvec = np.array([[x] for x in map(float, v.split(','))])
@@ -113,12 +156,17 @@ def inputCalibration(fname):
 						rvec = np.array([[x] for x in map(float, v.split(','))])
 				if k == 'missing_dots':
 					missing_dots = map(lambda x: tuple(map(int, x.split(','))) ,v.split(';'))
+				if k == 'umissing_dots':
+					umissing_dots = map(lambda x: tuple(map(int, x.split(','))) ,v.split(';'))
 			
 			img = ImagePair(cal_fname, dot_fname)
 			img.filter_fname = filter_fname
+			img.ufilter_fname = ufilter_fname
+			img.saved_dots_fname = saved_dots_fname
 			img.tvec = tvec
 			img.rvec = rvec
 			img.missing_dots = missing_dots
+			img.umissing_dots = umissing_dots
 
 			imgs.append(img)
 		else:
@@ -127,7 +175,7 @@ def inputCalibration(fname):
 			if vals[token] != None:
 				raise Exception('Duplicate token: ' + token)
 
-	if any(v == None for k, v in vals.iteritems()):
+	if any(v == None for k, v in vals.iteritems() if k[0] != 'u'):
 		raise Exception('Missing values: ' + ', '.join(k for k, v in vals.iteritems() if v == None))
 
 	return CameraCalibration(**vals), imgs
@@ -138,11 +186,15 @@ class ImagePair:
 		self.dot_fname = dot_fname
 
 		self.filter_fname = None
+		self.ufilter_fname = None
 
 		self.tvec = None
 		self.rvec = None
 
+		self.saved_dots_fname = None
+
 		self.missing_dots = []
+		self.umissing_dots = []
 
 def getImagePairs(folder):
 	fnames = defaultdict(list)
@@ -167,34 +219,53 @@ def getImagePairs(folder):
 		if cal_fname == None:
 			continue
 		image_pairs.append(ImagePair(cal_fname, dot_fname))
-		print cal_fname, dot_fname
 
 	return image_pairs
+
+def formatTimeDelta(total_seconds):
+	hours, remainder = divmod(total_seconds, 3600)
+	minutes, seconds = divmod(remainder, 60)
+
+	return str(int(hours)) + ':' + ('0' if minutes < 10 else '') + str(int(minutes)) + ':' + str(seconds)
 
 def calibrateCamera(image_pairs, save_cal_images = True):
 	# Termination criteria
 	criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-	objp = np.zeros((6 * 6, 3), np.float32)
-	objp[:,:2] = np.mgrid[0:6,0:6].T.reshape(-1,2)
+	grid_x = 19
+	grid_y = 19
+
+	objp = np.zeros((grid_x * grid_y, 3), np.float32)
+	objp[:,:2] = np.mgrid[0:grid_x, 0:grid_y].T.reshape(-1,2)
 
 	obj_points = [] # 3d points of the plane
 	img_points = [] # 2d points in the image
 
 	working_inds = []
 
+	abs_start = datetime.now()
+
+	# TMP
+	image_pairs = image_pairs[-1:]
+
 	for ip_ind, ip in enumerate(image_pairs):
 		print 'Running image', ip_ind + 1, 'of', len(image_pairs)
+		print 'Using image', ip.cal_fname
+
+		this_start = datetime.now()
 
 		img = cv2.imread(ip.cal_fname)
 		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+		print gray.shape
+
 		# Find the corners
-		ret, corners = cv2.findChessboardCorners(gray, (6, 6), None)
+		ret, corners = cv2.findChessboardCorners(gray, (grid_x, grid_y), None)
 
 		# Changes the order of the corners for these images to match the others
 		if ip.cal_fname in ['data/1-18/cal_4.JPG', 'data/1-18/cal_5.JPG', 'data/1-18/cal_8.JPG','data/1-18/cal_9.JPG', 'data/1-18/cal_10.JPG',
-				'data/1-21/cal_15.JPG', 'data/1-21/cal_7.JPG', 'data/1-21/cal_8.JPG']:
+				'data/1-21/cal_15.JPG', 'data/1-21/cal_7.JPG', 'data/1-21/cal_8.JPG',
+				'data/1-25/cal_1.JPG', 'data/1-25/cal_8.JPG', 'data/1-25/cal_15.JPG']:
 			grid_corners = dict()
 			for i, c in enumerate(corners):
 				x = i % 6
@@ -203,13 +274,20 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 				grid_corners[(x, y)] = c
 
 			new_corners = []
-			for x in xrange(0, 6, 1):
-				for y in xrange(5, -1, -1):
-					new_corners.append(grid_corners[(x, y)])
+			if ip.cal_fname in ['data/1-25/cal_8.JPG', 'data/1-25/cal_15.JPG']:
+				for x in xrange(0, 6, 1):
+					for y in xrange(5, -1, -1):
+						new_corners.append(grid_corners[(x, y)])
+			else:
+				for x in xrange(5, -1, -1):
+					for y in xrange(0, 6, 1):
+						new_corners.append(grid_corners[(x, y)])
 
 			corners = np.array(new_corners)
 
 		if ret == True:
+			print 'Found corners for image', ip_ind + 1
+
 			corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
 
 			working_inds.append(ip_ind)
@@ -218,7 +296,7 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 			img_points.append(corners2)
 
 			if save_cal_images:
-				img = cv2.drawChessboardCorners(img, (6, 6), corners2, ret)
+				img = cv2.drawChessboardCorners(img, (grid_x, grid_y), corners2, ret)
 
 				d = os.path.dirname(ip.cal_fname)
 
@@ -228,13 +306,29 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 				cal_img_name = os.path.join(d, 'calimg_' + str(n) + '.jpg')
 
 				cv2.imwrite(cal_img_name, img)
+		else:
+			print 'Didn\'t find corners for image', ip_ind + 1
+
+		this_end = datetime.now()
+
+		this_seconds = (this_end - this_start).total_seconds()
+		print 'This image took', formatTimeDelta(this_seconds)
+
+	abs_end = datetime.now()
+	abs_seconds = (abs_end - abs_start).total_seconds()
+	print 'Average image took', formatTimeDelta(abs_seconds)
 
 	# ret - whethere the calibration was sucessful
 	# mtx - intrinsic camera matrix
 	# dist - distortion parameters
 	# rvecs - rotation vectors for each image
 	# tvecs - translation vectors for each image
-	ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray.shape[::-1], None, None, criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10000000, 0.00000001))
+
+	# print obj_points
+	# print img_points
+	print gray.shape[::-1]
+
+	ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray.shape[::-1], None, None) #, criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10000000, 0.0001))
 
 	fx = mtx[0][0]
 	fy = mtx[1][1]
@@ -263,17 +357,17 @@ def calibrateCamera(image_pairs, save_cal_images = True):
 def tmp():
 	criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-	for fname in ['data/sample/chessboard-2.jpg']:
+	for fname in ['data/sample/red_chessboard.bmp']:
 		img = cv2.imread(fname)
 		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 		# Find the corners
-		ret, corners = cv2.findChessboardCorners(gray, (4, 7), None)
+		ret, corners = cv2.findChessboardCorners(gray, (8, 8), None)
 
 		if ret == True:
 			corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
 
-			img = cv2.drawChessboardCorners(img, (4, 7), corners2, ret)
+			img = cv2.drawChessboardCorners(img, (8, 8), corners2, ret)
 			cv2.imshow('img',img)
 			cv2.waitKey(5000)
 		else:
@@ -288,30 +382,6 @@ def projectLib(real_points, cal, rvec, tvec, show_image = True):
 
 	points_proj, _ = cv2.projectPoints(real_points, rvec, tvec, mtx, dist)
 	points_proj = np.squeeze(points_proj, axis = 1)
-
-	print points_proj
-
-	if show_image:
-		criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
-		img = cv2.imread(sample_image_fnames[0])
-		gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-		# Find the corners
-		ret, corners = cv2.findChessboardCorners(gray, (7, 6), None)
-
-		if ret == True:
-			corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
-
-			img = cv2.drawChessboardCorners(img, (7, 6), corners2, ret)
-
-
-			# endpoint = np.array([[points_proj[0][0] + 0.0, points_proj[0][1] + 10.0],])
-			img = cv2.line(img, tuple(map(int, points_proj.ravel())), tuple(map(int, points_proj.ravel())), (0, 0, 255), 5)
-
-			cv2.imshow('img',img)
-			cv2.waitKey()
-		cv2.destroyAllWindows()
 
 	return points_proj
 
@@ -345,7 +415,7 @@ def unproject(image_points, z_values, cal, rvec, tvec):
 
 			rps = np.array([[x, y, z]])
 
-			rv = projectSimp(rps, cal, rvec, tvec)
+			rv = projectLib(rps, cal, rvec, tvec)
 			calc_ix, calc_iy = rv[0]
 
 			return [ip[0] - calc_ix, ip[1] - calc_iy]
@@ -369,12 +439,32 @@ def getRedFilter(img_pair):
 	low_val = 10
 	high_val = 100
 
-	for x in range(height):
-		for y in range(width):
-			b, g, r = dot_img[x][y]
+	brush = []
+	brush_size = 25
+	brush_type = 'circle'
+	for a in xrange(-brush_size, brush_size + 1, 1):
+		for b in xrange(-brush_size, brush_size + 1, 1):
+			valid = True
+			if brush_type == 'circle':
+				valid = (math.sqrt(pow(a, 2) + pow(b, 2)) <= brush_size)
+			elif brush_type == 'square':
+				pass
+			else:
+				raise Exception('Invalid brush_type: ' + str(brush_type))
 
-			if b <= low_val and g <= low_val and r >= high_val:
-				filter_img[x][y] = 255
+			if valid:
+				brush.append((a, b))
+	print 'Using brush', sorted(brush)
+
+	for x in range(height):
+		if x % 100 == 0:
+			print 'Running row', x
+		for y in range(width):
+			if dot_img[x][y][0] <= low_val and dot_img[x][y][1] <= low_val and dot_img[x][y][2] >= high_val:
+
+				for a, b in brush:
+					if x + a >= 0 and x + a < height and y + b >= 0 and y + b < width:
+						filter_img[x + a][y + b] = 255
 
 	d = os.path.dirname(img_pair.dot_fname)
 
@@ -387,6 +477,49 @@ def getRedFilter(img_pair):
 
 	cv2.imwrite(img_pair.filter_fname, filter_img)
 
+def undistortFilterImage(cal, img_pair):
+	filter_img = cv2.imread(img_pair.filter_fname, cv2.IMREAD_GRAYSCALE)
+	height, width = filter_img.shape
+	mtx, dist = cal.npArrays()
+	new_mtx, _ = cv2.getOptimalNewCameraMatrix(mtx, dist, (width, height), 0, (width, height))
+
+	print mtx
+	print new_mtx
+
+	ufx = new_mtx[0][0]
+	ufy = new_mtx[1][1]
+	ucx = new_mtx[0][2]
+	ucy = new_mtx[1][2]
+
+	if cal.ufx == None and cal.ufy == None and cal.ucx == None and cal.ucy == None:
+		cal.ufx = ufx
+		cal.ufy = ufy
+		cal.ucx = ucx
+		cal.ucy = ucy
+	elif abs(cal.ufx - ufx) > 0.001 or abs(cal.ufy - ufy) > 0.001 or abs(cal.ucx - ucx) > 0.001 or abs(cal.ucy - ucy) > 0.001:
+		print cal.ufx, ufx
+		print cal.ufy, ufy
+		print cal.ucx, ucx
+		print cal.ucy, ucy
+
+		raise Exception('Mismatching undistorted parameters')
+
+	ufilter_img = cv2.undistort(filter_img, mtx, dist, None, new_mtx)
+
+	d = os.path.dirname(img_pair.dot_fname)
+
+	bn = os.path.basename(img_pair.dot_fname)
+	n = int(bn[bn.find('_') + 1:bn.find('.')])
+
+	img_pair.ufilter_fname = os.path.join(d, 'uf_' + str(n) + '.jpg')
+
+	print img_pair.ufilter_fname
+
+	cv2.imwrite(img_pair.ufilter_fname, ufilter_img)
+
+dot_search_size = 1
+dot_search_range = [k for k in xrange(-dot_search_size, dot_search_size + 1, 1)]
+
 class Dot:
 	def __init__(self):
 		self.pixels = set()
@@ -395,13 +528,31 @@ class Dot:
 		self.coord = None
 		self.gm_vals = None
 
+		self.min_x = None
+		self.max_x = None
+		self.min_y = None
+		self.max_y = None
+
+		self.real_point = None
+
 	def forceAdd(self, x, y):
 		self.pixels.add((x, y))
 
+		if self.min_x == None or x < self.min_x:
+			self.min_x = x
+		if self.max_x == None or x > self.max_x:
+			self.max_x = x
+
+		if self.min_y == None or y < self.min_y:
+			self.min_y = y
+		if self.max_y == None or y > self.max_y:
+			self.max_y = y
+
 	def add(self, x, y):
-		if any((x + a, y + b) in self.pixels for a, b in itertools.product([-2, -1, 0, 1, 2], repeat = 2)):
-			self.pixels.add((x, y))
-			return True
+		if x >= self.min_x - dot_search_size and x <= self.max_x + dot_search_size and y >= self.min_y - dot_search_size and y <= self.max_y + dot_search_size:
+			if any((x + a, y + b) in self.pixels for a, b in itertools.product(dot_search_range, repeat = 2)):
+				self.forceAdd(x, y)
+				return True
 		return False
 
 	def merge(self, dot):
@@ -409,6 +560,82 @@ class Dot:
 
 	def size(self):
 		return len(self.pixels)
+
+def outputDots(dots, out_fname):
+	f = open(out_fname, 'w')
+
+	for dot in dots:
+		if len(dot.pixels) == 0:
+			continue
+
+		f.write('pixels:' + ';'.join(map(lambda x: str(x[0]) + ',' + str(x[1]), dot.pixels)))
+		
+		if dot.center != None:
+			f.write(' center:' + ','.join(map(str, dot.center)))
+
+		if dot.coord != None:
+			f.write(' coord:' + ','.join(map(str, dot.coord)))
+
+		if dot.gm_vals != None:
+			f.write(' gm_vals:' + ','.join(map(str, dot.gm_vals)))
+
+		f.write('\n')
+
+def inputDots(in_fname):
+	f = open(in_fname, 'r')
+
+	dots = []
+	for line in f:
+		str_vals = line.split()
+
+		if len(str_vals) == 0:
+			continue
+
+		pixels = set()
+		center = None
+		coord = None
+		gm_vals = None
+
+		for str_val in str_vals:
+			token, str_val = str_val.split(':')
+
+			if token == 'pixels':
+				pixels = set(map(lambda x: tuple(map(int, x.split(','))), str_val.split(';')))
+
+				# Check
+				for pixel in pixels:
+					if not(type(pixel) is tuple and len(pixel) == 2 and type(pixel[0]) is int and type(pixel[1]) is int):
+						raise Exception('Error reading in pixels')
+
+			if token == 'center':
+				center = tuple(map(float, str_val.split(',')))
+
+				if not(type(center) is tuple and len(center) == 2 and type(center[0]) is float and type(center[1]) is float):
+					raise Exception('Error reading in center')
+
+			if token == 'coord':
+				coord = tuple(map(int, str_val.split(',')))
+
+				if not(type(coord) is tuple and len(coord) == 2 and type(coord[0]) is int and type(coord[1]) is int):
+					raise Exception('Error reading in coord')
+
+			if token == 'gm_vals':
+				gm_vals = tuple(map(int, str_val.split(',')))
+
+				if not(type(gm_vals) is tuple and len(gm_vals) == 2 and type(gm_vals[0]) is int and type(gm_vals[1]) is int):
+					raise Exception('Error reading in gm_vals')
+
+		dot = Dot()
+		for x, y in pixels:
+			dot.forceAdd(x, y)
+
+		dot.center = center
+		dot.coord = coord
+		dot.gm_vals = gm_vals
+
+		dots.append(dot)
+
+	return dots
 
 # Finds the the value t s.t. the distance between f(t) = (xm, ym) * t + (xb, yb) and (x, y) is minimized
 # Returns the value of t, f(t), and the distance between f(t) and (x, y)
@@ -422,41 +649,60 @@ def minDistToLine(x, y, xm, ym, xb, yb):
 
 	return t, fx, fy, d
 
-def getRedDots(img_pair):
+def getRedDots(cal, img_pair):
 	if img_pair.tvec is None or img_pair.rvec is None:
 		return
 
 	dot_img = cv2.imread(img_pair.dot_fname)
-	filter_img = cv2.imread(img_pair.filter_fname, cv2.IMREAD_GRAYSCALE)
 
+	filter_img = cv2.imread(img_pair.filter_fname, cv2.IMREAD_GRAYSCALE)
 	height, width, _ = dot_img.shape
 
-	filter_pixels = []
-
-	for x in range(height):
-		for y in range(width):
-			if filter_img[x][y] > 200:
-				filter_pixels.append((x, y))
-
-	# Find the connected components ("dots")
 	dots = []
-	for x, y in filter_pixels:
+	if img_pair.saved_dots_fname == None:
+		filter_pixels = []
 
-		this_dots = [d for d in dots if d.add(x, y)]
+		for x in range(height):
+			for y in range(width):
+				print 'Checking pixel progress', str(float(x * width + y + 1) / float(height * width) * 100.0) + '%                \r',
+				if filter_img[x][y] > 100:
+					filter_pixels.append((x, y))
+		print 'Got all pixels                              '
 
-		if len(this_dots) == 0:
-			new_dot = Dot()
-			new_dot.forceAdd(x, y)
-			dots.append(new_dot)
-		if len(this_dots) == 1:
-			pass
-		if len(this_dots) > 1:
+		# Find the connected components ("dots")
+		ip = 1
+		for x, y in filter_pixels:
+			print 'Grouping pixels', str(float(ip) / float(len(filter_pixels)) * 100.0) + '%            \r',
+			ip += 1
 
-			this_dot = this_dots[0]
-			for dot in this_dots[1:]:
-				this_dot.merge(dot)
-				dots.remove(dot)
+			this_dots = [d for d in dots if d.add(x, y)]
 
+			if len(this_dots) == 0:
+				new_dot = Dot()
+				new_dot.forceAdd(x, y)
+				dots.append(new_dot)
+			if len(this_dots) == 1:
+				pass
+			if len(this_dots) > 1:
+
+				this_dot = this_dots[0]
+				for dot in this_dots[1:]:
+					this_dot.merge(dot)
+					dots.remove(dot)
+		print 'Done processing pixels                           '
+
+		# Output dots
+		d = os.path.dirname(img_pair.dot_fname)
+
+		bn = os.path.basename(img_pair.dot_fname)
+		n = int(bn[bn.find('_') + 1:bn.find('.')])
+
+		img_pair.saved_dots_fname = os.path.join(d, 'saved-dots_' + str(n) + '.txt')
+
+		outputDots(dots, img_pair.saved_dots_fname)
+	else:
+		print 'Getting dots from', img_pair.saved_dots_fname
+		dots = inputDots(img_pair.saved_dots_fname)
 
 	# Find the center of each dot. The center is defined as the brightest pixel
 	for dot in dots:
@@ -574,12 +820,17 @@ def getRedDots(img_pair):
 		if (x, y) not in dots_by_coord or dots_by_coord[(x, y)] != None:
 			continue
 
+		found = False
 		for ax, ay in spiral_search:
 			bx = x - ax
 			by = y - ay
 
 			if (ax, ay) in dots_by_coord and dots_by_coord[(ax, ay)] != None and (bx, by) in dots_by_coord and dots_by_coord[(bx, by)] != None:
+				found = True
 				break
+
+		if not found:
+			raise Exception('Unable to find approximations for: ' + str((x, y)))
 
 		approx_px = origin_dot.center[0] + (dots_by_coord[(ax, ay)].center[0] - origin_dot.center[0]) + (dots_by_coord[(bx, by)].center[0] - origin_dot.center[0])
 		approx_py = origin_dot.center[1] + (dots_by_coord[(ax, ay)].center[1] - origin_dot.center[1]) + (dots_by_coord[(bx, by)].center[1] - origin_dot.center[1])
@@ -602,7 +853,7 @@ def getRedDots(img_pair):
 
 	# Calculates the gm_vals for each dot
 	for d in dots:
-		d.gm_vals = (d.coord[0] * 2048 + 32768, d.coord[1] * 2048 + 32768)
+		d.gm_vals = (32768 - d.coord[0] * 2048, 32768 - d.coord[1] * 2048)
 
 	# Checks that all dots have coord and gm_vals set
 	for d in dots:
@@ -636,6 +887,9 @@ def getRedDots(img_pair):
 
 	cv2.imwrite('tmp.jpg', tmp_img)
 
+	if img_pair.saved_dots_fname != None:
+		outputDots(dots, img_pair.saved_dots_fname)
+
 	return dots
 
 def computeAndSaveCalibration(image_folder, output_file):
@@ -649,36 +903,70 @@ def computeAndSaveCalibration(image_folder, output_file):
 def computeRedFilter(cal_file):
 	cal, image_pairs = inputCalibration(cal_file)
 	for img_pair in image_pairs:
-		if img_pair.filter_fname == None:
+		if img_pair.dot_fname != None and img_pair.filter_fname == None:
 			getRedFilter(img_pair)
 
 	outputCalibration(cal, image_pairs, cal_file)
 
-def computeRedDots(cal_file):
+def computeUndistortedFilterImages(cal_file):
 	cal, image_pairs = inputCalibration(cal_file)
 
+	cal.ufx = None
+	cal.ufy = None
+	cal.ucx = None
+	cal.ucy = None
+
+	for img_pair in image_pairs:
+		if img_pair.filter_fname != None:
+			undistortFilterImage(cal, img_pair)
+
+	outputCalibration(cal, image_pairs, cal_file)
+
+def computeRedDots(cal_file, dot_file, k = None, subset = None, plot_error = False):
+	cal, all_image_pairs = inputCalibration(cal_file)
+
+	if subset != None:
+		image_pairs = [all_image_pairs[i] for i in subset]
+	else:
+		image_pairs = all_image_pairs
+
+	if k == None:
+		k = len(image_pairs)
+
 	all_dots = []
-	for img_pair in image_pairs[:8]:
+	for img_pair in image_pairs[:k]:
 		if img_pair.filter_fname != None and img_pair.filter_fname not in ['data/1-11/filter_6.jpg', 'data/1-11/filter_15.jpg', 'data/1-21/filter_7.jpg']:
 			print 'Getting Red Dots for image', img_pair.dot_fname
-			this_dots = getRedDots(img_pair)
+			this_dots = getRedDots(cal, img_pair)
 			all_dots.append((this_dots, img_pair))
+
+	outputCalibration(cal, all_image_pairs, cal_file)
 
 	dots_by_coord = defaultdict(list)
 	for dots, img_pair in all_dots:
 		for d in dots:
-			dots_by_coord[d.coord].append((d, img_pair.rvec, img_pair.tvec))
+			dots_by_coord[d.coord].append(d)
 
-	all_dists = []
-	dists_by_coord = defaultdict(list)
-	for x, y in sorted(dots_by_coord):
-		real_points = []
-		for d, rvec, tvec in dots_by_coord[(x, y)]:
 			image_points = np.array([list(d.center)])
 			z_values = np.array([0.0])
 
-			real_point = unproject(image_points, z_values, cal, rvec, tvec)[0]
-			real_points.append(real_point)
+			d.real_point = unproject(image_points, z_values, cal, img_pair.rvec, img_pair.tvec)[0]
+
+	all_dists = []
+	dists_by_coord = dict()
+	avg_dots = dict()
+	for x, y in sorted(dots_by_coord):
+		real_points = []
+
+		gm_vals = None
+		for d in dots_by_coord[(x, y)]:
+			
+			real_points.append(d.real_point)
+
+			if gm_vals == None:
+				gm_vals = d.gm_vals
+			elif gm_vals != d.gm_vals:
+				raise Exception('Mismatching gm_vals')
 
 		# Calculate "average" point
 
@@ -686,26 +974,97 @@ def computeRedDots(cal_file):
 		dists = [math.sqrt(sum(pow(rv - av, 2.0) for rv, av in zip(rp, avg_point))) for rp in real_points]
 		all_dists += dists
 		dists_by_coord[(x, y)] = sum(dists) / len(dists)
+		avg_dots[gm_vals] = avg_point
 
 	print 'Max dist:', max(all_dists)
 	print 'Avg dist:', sum(all_dists) / len(all_dists)
 
 	print 'Worsts Coords:', sorted(((x, y, dists_by_coord[(x, y)]) for x, y in dists_by_coord), key = lambda v: v[2], reverse = True)[:5]
 
-if __name__ == '__main__':
-	data_folder = 'data/1-25/'
-	save_file = 'cal_data_1-25.txt'
+	if plot_error:
+		x_vals, y_vals, z_vals = [], [], []
+		for xv in xrange(-12, 8 + 1, 1):
+			this_x_vals, this_y_vals, this_z_vals = [], [], []
+			for yv in xrange(-14, 4 + 1, 1):
+				this_x_vals.append(float(xv))
+				this_y_vals.append(float(yv))
+				if (xv, yv) in dists_by_coord:
+					this_z_vals.append(dists_by_coord[(xv, yv)])
+				else:
+					this_z_vals.append(0.0)
 
-	# 1) Compute the camera caliibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
-	computeAndSaveCalibration(data_folder, save_file)
+			x_vals.append(this_x_vals)
+			y_vals.append(this_y_vals)
+			z_vals.append(this_z_vals)
+
+		plot3D(np.array(x_vals), np.array(y_vals), np.array(z_vals))
+
+	# Outputs the dots locations
+	df_mode = 'one'
+	if dot_file not in [None, '']:
+		f_dot = open(dot_file, 'w')
+
+		f_dot.write('GMH GMV X Y Z\n')
+		if df_mode == 'all':
+			for gm_vals, point in sorted(avg_dots.iteritems()):
+				f_dot.write(' '.join(map(str, list(gm_vals) + list(point))) + '\n')
+		elif df_mode == 'one':
+			for dot in all_dots[0][0]:
+				# print dot
+				f_dot.write(' '.join(map(str, list(dot.gm_vals) + list(dot.real_point))) + '\n')
+
+def plot3D(x, y, z):
+	fig = plt.figure()
+	ax = fig.gca(projection = '3d')
+
+	surf = ax.plot_surface(x, y, z, rstride = 1, cstride = 1, cmap = cm.coolwarm, linewidth = 0, antialiased = False)
+
+	min_z = min(v for r in z for v in r)
+	max_z = max(v for r in z for v in r)
+	zlim = (math.floor(min_z * 100) / 100.0, math.ceil(max_z * 100) / 100.0)
+	ax.set_zlim(*zlim)
+
+	ax.zaxis.set_major_locator(LinearLocator(10))
+	ax.zaxis.set_major_formatter(FormatStrFormatter('%.03f'))
+
+	fig.colorbar(surf, shrink = 0.5, aspect = 5)
+	ax.set_xlabel('Horizontal GM')
+	ax.set_ylabel('Vertical GM')
+	ax.set_zlabel("Average Error")
+
+	ax.set_xlim((-12, 8))
+	ax.set_ylim((-14, 4))
+
+	plt.show()
+
+	return fig
+
+if __name__ == '__main__':
+	data_folder = 'data/2-5/'
+	save_file = 'cal_data_2-5_matlab.txt'
+	dot_file = 'dots_2-5.txt'
+
+	print 'Using', save_file
+
+	# 1) Compute the camera calibration, rotation vectors, and translation vectors from images in data_folder and save it to save_file
+	# computeAndSaveCalibration(data_folder, save_file)
 
 	# 2) Computes the filter images.
 	# computeRedFilter(save_file)
+
+	# 2a) Undistory the Filter image
+	# computeUndistortedFilterImages(save_file)
 
 	# After computing the filter images, you may have to manually:
 	#	a) Remove anything that isn't a laser dot
 	#	b) Add "missing_dots" entry to save_file. This is any dot that isn't visible in the filter image. See 'cal_test.txt' for details.
 	#	c) Increase the size of the "median" dots
 
+
 	# 3) Find the Red Dots.
-	computeRedDots(save_file)
+	computeRedDots(save_file, dot_file, k = 1, plot_error = True)
+	# for subset in itertools.combinations(range(5), 2):
+		# computeRedDots(save_file, dot_file, k = None, subset = subset, plot_error = True)
+
+	# TMP
+	# tmp()
