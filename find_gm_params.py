@@ -3,6 +3,8 @@ import numpy as np
 import cv2
 import math
 
+from scipy.optimize import least_squares
+
 # TODO make everything in meters
 
 # Angles are in radians
@@ -180,11 +182,19 @@ def gmValToRadian(gm_val):
 	return (40.0 / pow(2.0, 16.0) * gm_val - 20.0) * math.pi / 180.0
 
 def getGMFromCAD(init_dir, init_point):
-	return GM(init_dir, init_point,
-			Plane(Vec(-0.183253086052, 0.68303422983, -0.707023724721), Vec(4.33404917057, 2.9865539516, 1.50005588143)),
-			Vec(0.965927222809, 0.258813833165, 0.0),
-			Plane(Vec(0.793391693847, -0.608711442422, 0.0), Vec(4.02024772148, 4.46917730708, 1.41303253915)),
-			Vec(0.0, 0.0, -1.0))
+	# gm = GM(init_dir, init_point,
+	# 		Plane(Vec(-0.183253086052, 0.68303422983, -0.707023724721), Vec(4.33404917057, 2.9865539516, 1.50005588143)),
+	# 		Vec(0.965927222809, 0.258813833165, 0.0),
+	# 		Plane(Vec(0.793391693847, -0.608711442422, 0.0), Vec(4.02024772148, 4.46917730708, 1.41303253915)),
+	# 		Vec(0.0, 0.0, -1.0))
+
+	gm = GM(init_dir, init_point,
+			Plane(Vec(-0.707023724721, 0.68303422983, 0.183253086052), Vec(1.50005588143, 2.9865539516, -4.33404917057)),
+			Vec(0.0, 0.258813833165, -0.965927222809),
+			Plane(Vec(0.0, -0.608711442422, -0.793391693847), Vec(1.41303253915, 4.46917730708, -4.02024772148)),
+			Vec(-1.0, 0.0, 0.0))
+
+	return gm
 
 class GM:
 	def __init__(self, init_dir, init_point, m1, a1, m2, a2):
@@ -298,6 +308,9 @@ def drawDots(collected_dots, gen_dots, out_fname = 'dot.jpg'):
 		if dots == None:
 			continue
 
+		print min(d.loc.x for d in dots), max(d.loc.x for d in dots)
+		print min(d.loc.y for d in dots), max(d.loc.y for d in dots)
+
 		for d in dots:
 			# Convert 3d location to pixel
 			if abs(d.loc.z) > 0.0000001:
@@ -345,27 +358,67 @@ def generateDots(gm, gm_vals, wall_plane):
 
 		ip, neg = wall_plane.intersect(p, d)
 
-		if neg is None or neg is False:
-			print p, d, ip, neg
-
-			raise Exception('Wall plane is behind the GM')
+		# if neg is None or neg is False:
+		# 	print 'Error GM behind wall:', p, d, ip, neg
 
 		dots.append(Dot(gm1_val, gm2_val, ip))
 
 	return dots
 
+# Find GM Param functions
+
+# Finds the orientation and position of a given GM that minimizes the error between observed and calculated dots.
+def makeRotAndTransFunction(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0))):
+	def eq(vs):
+		r_theta, r_alpha, r_beta, t_x, t_y, t_z = vs
+
+		rt_gm = gm.move(quatFromAngle(r_theta, r_alpha, r_beta).toRotMatrix(), Vec(t_x, t_y, t_z))
+
+		rv = []
+		for dot in dots:
+			p, d = rt_gm.getOutput(dot.gmh, dot.gmv)
+
+			calc_loc, neg = wall_plane.intersect(p, d)
+
+			if neg:
+				rv += [float('inf'), float('inf'), float('inf')]
+			else:
+				rv += [calc_loc.x - dot.loc.x, calc_loc.y - dot.loc.y, calc_loc.z - dot.loc.z]
+
+		return rv
+
+	return eq
+
+def findRotAndTransParams(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0))):
+	f = makeRotAndTransFunction(gm, dots, wall_plane)
+
+	rv = least_squares(f, (0.0, 0.0, 0.0, 0.0, 0.0, 100.0))
+
+	cost = rv.cost
+	r_theta, r_alpha, r_beta, t_x, t_y, t_z = rv.x
+
+	print r_theta, r_alpha, r_beta
+
+	R = quatFromAngle(r_theta, r_alpha, r_beta).toRotMatrix()
+	T = Vec(t_x, t_y, t_z)
+
+	return R, T, cost
+
 if __name__ == '__main__':
 	collected_dots = getDotsFromFile('data/2-14/data_2-14.txt')
 
 	# Initialize GM
-	# init_gm = getGMFromCAD(Vec(-1.0, 0.0, 0.0), Vec(5.33404917057, 2.9865539516, 1.50005588143))
+	init_gm = getGMFromCAD(Vec(1.0, 0.0, 0.0), Vec(0.50005588143, 2.9865539516, -4.33404917057))
 
-	init_gm = GM(Vec(0.0, 1.0, 0.0), Vec(-1.0, -1.0, 0.0),
-					Plane(Vec(1.0, -1.0, 0.0), Vec(-1.0, 0.0, 0.0)), Vec(0.0, 0.0, -1.0),
-					Plane(Vec(-1.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0)),  Vec(0.0, -1.0, 0.0))
+	R, T, cost = findRotAndTransParams(init_gm, collected_dots)
+
+	print 'Rotation Matrix:',
+	print R
+	print 'Translation Vector:', T
+	print 'Scipy least_squares cost:', cost
 
 	# Find rotation and translation that best matches data
-	opt_gm = init_gm.move(Matrix(-1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0), Vec(375.0, -115.0, -1000.0))
+	opt_gm = init_gm.move(R, T)
 
 	# Generate dots
 	gen_dots = generateDots(opt_gm, [(d.gmh, d.gmv) for d in collected_dots], Plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0)))
