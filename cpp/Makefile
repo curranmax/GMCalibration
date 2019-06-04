@@ -1,5 +1,5 @@
 
-CC = g++-4.9
+CC = g++
 CFLAGS = -Wall -std=c++11
 
 TT_SOURCES = main.cpp vec.cpp matrix.cpp simp_plane.cpp gm_model.cpp dot.cpp link_tracking.cpp
