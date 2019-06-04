@@ -10,7 +10,7 @@
 
 int main(int argc, char const *argv[]) {
 	// Get dots
-	std::vector<Dot> dots = getDotsFromFile("../data/5-21/dot_data_5-21.txt");
+	std::vector<Dot> dots = getDotsFromFile("data/dot_data_5-21.txt");
 
 	// Get GM Model
 	// GMModel gm_model = getGMModelFromFile("../data/4-25/gm_opt-local_4-25.txt");
