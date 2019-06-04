@@ -13,20 +13,20 @@ int main(int argc, char const *argv[]) {
 	std::vector<Dot> dots = getDotsFromFile("data/dot_data_5-21.txt");
 
 	// Get GM Model
-	// GMModel gm_model = getGMModelFromFile("../data/4-25/gm_opt-local_4-25.txt");
+	GMModel gm_model = getGMModelFromFile("data/gm_from_cad.txt");
 
-	Vec init_dir = vecFromAngle(0.0, 0.0);
-	Vec init_point(-109.0, 36.0, -46.0);
+	// Vec init_dir = vecFromAngle(0.0, 0.0);
+	// Vec init_point(-109.0, 36.0, -46.0);
 
-	Vec m1_norm(-0.707023724726, 0.683034229835, 0.183253086053);
-	Vec m1_point(14.81, 38.53, -39.97);
-	Vec m1_axis(0.0, 0.249998, -0.9682459);
+	// Vec m1_norm(-0.707023724726, 0.683034229835, 0.183253086053);
+	// Vec m1_point(14.81, 38.53, -39.97);
+	// Vec m1_axis(0.0, 0.249998, -0.9682459);
 
-	Vec m2_norm(0.0, -0.608711442422, -0.793391693847);
-	Vec m2_point(15.0, 51.97, -39.37);
-	Vec m2_axis(-1.0, 0.0, 0.0);
+	// Vec m2_norm(0.0, -0.608711442422, -0.793391693847);
+	// Vec m2_point(15.0, 51.97, -39.37);
+	// Vec m2_axis(-1.0, 0.0, 0.0);
 
-	GMModel gm_model(init_dir, init_point, SimpPlane(m1_norm, m1_point), m1_axis, SimpPlane(m2_norm, m2_point), m2_axis);
+	// GMModel gm_model(init_dir, init_point, SimpPlane(m1_norm, m1_point), m1_axis, SimpPlane(m2_norm, m2_point), m2_axis);
 
 	// Get Rotation Matrix and Translation Vector
 	Matrix rot_mtx = rotMatrixFromYPR(0.0, 0.0, 0.0);
