@@ -38,10 +38,10 @@ int main(int argc, char const *argv[]) {
 	// float idir_range = 0.0, idir_step = 0.0;
 	// float iloc_range = 0.0, iloc_step = 0.0;
 
-	float rot_range = 0.1, rot_step = 0.05;
-	float trans_range = 10.0, trans_step = 5.0;
-	float idir_range = 0.0, idir_step = 0.0;
-	float iloc_range = 0.0, iloc_step = 0.0;
+	float rot_range = 0.1, rot_step = 0.02;
+	float trans_range = 10.0, trans_step = 2.0;
+	float idir_range = 0.03, idir_step = 0.015;
+	float iloc_range = 5.0, iloc_step = 2.5;
 
 	BruteForceParams params(rot_range, rot_step, trans_range, trans_step, idir_range, idir_step, iloc_range, iloc_step);
 
