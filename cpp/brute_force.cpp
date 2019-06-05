@@ -400,18 +400,18 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 		cur_iter++;
 		#endif
 
-		futures.push_back(std::async(std::launch::async, [&]() -> std::pair<TestCase, ErrorStats> {
-			double yaw_delta = rot_values[indexes[0]], pitch_delta = rot_values[indexes[1]], roll_delta = rot_values[indexes[2]];
-			double tx_delta = trans_values[indexes[3]], ty_delta = trans_values[indexes[4]], tz_delta = trans_values[indexes[5]];
-			double ida_delta = idir_values[indexes[6]], idb_delta = idir_values[indexes[7]];
-			double ily_delta = iloc_values[indexes[8]], ilz_delta = iloc_values[indexes[9]];
+		futures.push_back(std::async(std::launch::async, [&](std::vector<int> this_indexes) -> std::pair<TestCase, ErrorStats> {
+			double yaw_delta = rot_values[this_indexes[0]], pitch_delta = rot_values[this_indexes[1]], roll_delta = rot_values[this_indexes[2]];
+			double tx_delta = trans_values[this_indexes[3]], ty_delta = trans_values[this_indexes[4]], tz_delta = trans_values[this_indexes[5]];
+			double ida_delta = idir_values[this_indexes[6]], idb_delta = idir_values[this_indexes[7]];
+			double ily_delta = iloc_values[this_indexes[8]], ilz_delta = iloc_values[this_indexes[9]];
 			
 			TestCase this_vals(yaw_delta, pitch_delta, roll_delta, tx_delta, ty_delta, tz_delta, ida_delta, idb_delta, ily_delta, ilz_delta);
 
 			ErrorStats this_stats = getErrorStats(this_vals, rot_mtx, tvec, gm_model, dots, wall_plane);
 
 			return std::make_pair(this_vals, this_stats);
-		}));
+		}, indexes));
 
 		while(int(futures.size()) >= num_threads) {
 			for(auto itr = futures.begin(); itr != futures.end();) {
