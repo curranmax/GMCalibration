@@ -368,7 +368,7 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	refresh();
 
 	int cur_iter = 0;
-	int print_frequency = 100;
+	int print_frequency = 10000;
 	auto start_bf = std::chrono::high_resolution_clock::now();
 	#endif
 
