@@ -141,9 +141,9 @@ GMModel getGMModelFromFile(const std::string& fname) {
 }
 
 std::ostream& operator<<(std::ostream& ostr, const GMModel& gm_model) {
-	ostr << gm_model.init_dir << std::endl << gm_model.init_point << std::endl;
-	ostr << gm_model.mirror1 << std::endl << gm_model.rot_axis1 << std::endl;
-	ostr << gm_model.mirror2 << std::endl << gm_model.rot_axis2 << std::endl;
+	ostr << "init_dir " << gm_model.init_dir << std::endl << "init_point " << gm_model.init_point << std::endl;
+	ostr << "m1_norm " << gm_model.mirror1.normal << std::endl << "m1_point " << gm_model.mirror1.point << std::endl << "m1_axis " << gm_model.rot_axis1 << std::endl;
+	ostr << "m2_norm " << gm_model.mirror2.normal << std::endl << "m2_point " << gm_model.mirror2.point << std::endl << "m2_axis " << gm_model.rot_axis2;
 
 	return ostr;
 }

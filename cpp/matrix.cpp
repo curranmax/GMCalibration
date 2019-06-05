@@ -73,9 +73,9 @@ Matrix rotMatrixAboutAxis(Vec vec, double theta) {
 }
 
 std::ostream& operator<<(std::ostream& ostr, const Matrix& matrix) {
-	ostr << matrix.a << "   " << matrix.b << "   " << matrix.c << std::endl <<
-			matrix.d << "   " << matrix.e << "   " << matrix.f << std::endl <<
-			matrix.g << "   " << matrix.h << "   " << matrix.i << std::endl;
+	ostr << "[(" << matrix.a << ", " << matrix.b << ", " << matrix.c << "), (" <<
+					matrix.d << ", " << matrix.e << ", " << matrix.f << "), (" <<
+					matrix.g << ", " << matrix.h << ", " << matrix.i << ")]";
 
 	return ostr;
 }

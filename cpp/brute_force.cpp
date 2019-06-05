@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <ctime>
+#include <fstream>
 #include <future>
 #include <iostream>
 #include <list>
@@ -43,15 +44,26 @@ public:
 		return *this;
 	}
 
-	std::vector<double> getErrors(const Matrix& rot_mtx, const Vec& tvec, const GMModel& gm_model, const std::vector<Dot>& dots, const SimpPlane& wall_plane) const {
-		Matrix this_rot_mtx = rotMatrixFromYPR(rot_mtx.a1 + yaw_delta, rot_mtx.a2 + pitch_delta, rot_mtx.a3 + roll_delta);
-		Vec this_tvec = Vec(tvec.x + tx_delta, tvec.y + ty_delta, tvec.z + tz_delta);
+	Matrix getThisMatrix(const Matrix& rot_mtx) const {
+		return rotMatrixFromYPR(rot_mtx.a1 + yaw_delta, rot_mtx.a2 + pitch_delta, rot_mtx.a3 + roll_delta);
+	}
 
+	Vec getThisTvec(const Vec& tvec) const {
+		return Vec(tvec.x + tx_delta, tvec.y + ty_delta, tvec.z + tz_delta);
+	}
+
+	GMModel getThisGMModel(const GMModel& gm_model, const Matrix& this_rot_mtx, const Vec& this_tvec) const {
 		Vec this_init_dir = vecFromAngle(gm_model.init_dir.a1 + ida_delta, gm_model.init_dir.a2 + idb_delta);
 		Vec this_init_point = Vec(gm_model.init_point.x, gm_model.init_point.y + ily_delta, gm_model.init_point.z + ilz_delta);
 
-		GMModel this_gm_model = gm_model.moveWithNewInitBeam(this_rot_mtx, this_tvec, this_init_dir, this_init_point);
+		return gm_model.moveWithNewInitBeam(this_rot_mtx, this_tvec, this_init_dir, this_init_point);
+	}
 
+	std::vector<double> getErrors(const Matrix& rot_mtx, const Vec& tvec, const GMModel& gm_model, const std::vector<Dot>& dots, const SimpPlane& wall_plane) const {
+		Matrix this_rot_mtx = getThisMatrix(rot_mtx);
+		Vec this_tvec = getThisTvec(tvec);
+		GMModel this_gm_model = getThisGMModel(gm_model, this_rot_mtx, this_tvec);
+		
 		return computeErrors(this_gm_model, dots, wall_plane);
 	}
 
@@ -150,6 +162,31 @@ ErrorStats analyzeErrors(const std::vector<double>& errors) {
 ErrorStats getErrorStats(const TestCase& this_vals, const Matrix& rot_mtx, const Vec& tvec, const GMModel& gm_model, const std::vector<Dot>& dots, const SimpPlane& wall_plane) {
 	std::vector<double> errors = this_vals.getErrors(rot_mtx, tvec, gm_model, dots, wall_plane);
 	return analyzeErrors(errors);
+}
+
+void writeResultsToFile(const std::string fname, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const std::vector<std::pair<TestCase, ErrorStats> >& results) {
+	std::ofstream ostr(fname, std::ofstream::out);
+
+	ostr << "Initial Data" << std::endl;
+	ostr << gm_model << std::endl;
+	ostr << "tvec " << tvec << std::endl;
+	ostr << "rmtx " << rot_mtx << std::endl;
+	
+	for(unsigned int i = 0; i < results.size(); ++i) {
+		ostr << std::endl << "----------------------------------" << std::endl << std::endl;
+		ostr << "this_vals " << results[i].first << std::endl;
+		ostr << "avg_err " << results[i].second.average << std::endl;
+		ostr << "max_err " << results[i].second.maximum << std::endl;
+
+		auto this_tvec = results[i].first.getThisTvec(tvec);
+		auto this_rmtx = results[i].first.getThisMatrix(rot_mtx);
+		auto this_gm_model = results[i].first.getThisGMModel(gm_model, this_rmtx, this_tvec);
+
+		ostr << "Params" << std::endl;
+		ostr << this_gm_model << std::endl;
+		ostr << "tvec " << this_tvec << std::endl;
+		ostr << "rmtx " << this_rmtx << std::endl;
+	}
 }
 
 void runBruteForceSearch(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer) {
@@ -368,7 +405,7 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	refresh();
 
 	int cur_iter = 0;
-	int print_frequency = 10000;
+	int print_frequency = 1000;
 	auto start_bf = std::chrono::high_resolution_clock::now();
 	#endif
 
@@ -389,7 +426,7 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 			auto exp_end_in_time_t = std::chrono::system_clock::to_time_t(exp_end);
 
 			char buf[80];
-			std::strftime(buf, sizeof(buf), "%A %b-%d %I:%M:%S %p", std::localtime(&exp_end_in_time_t));
+			std::strftime(buf, sizeof(buf), "%A %b-%d %I:%M:%S %p %Z", std::localtime(&exp_end_in_time_t));
 
 			move(0, 0);
 			printw(progress_format.c_str(), double(cur_iter) / double(num_iterations) * 100.0);
@@ -568,4 +605,19 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	std::cout << "Best lsq solution --> " << best_lsq_solution << std::endl;
 	std::cout << "Avg error: " << best_lsq_errs.average << std::endl;
 	std::cout << "Max error: " << best_lsq_errs.maximum << std::endl << std::endl;
+
+	std::vector<std::pair<TestCase, ErrorStats> > results;
+	results.push_back(std::make_pair(best_avg_solution, best_avg_errs));
+	results.push_back(std::make_pair(best_max_solution, best_max_errs));
+	results.push_back(std::make_pair(best_lsq_solution, best_lsq_errs));
+
+	auto fname_time = std::chrono::high_resolution_clock::now();
+	auto fname_time_in_time_t = std::chrono::system_clock::to_time_t(fname_time);
+
+	char buf[80];
+	std::strftime(buf, sizeof(buf), "out/output_%a-%b-%d_%H:%M:%S_%Z.txt", std::localtime(&fname_time_in_time_t));
+
+	std::string out_fname(buf);
+	writeResultsToFile(out_fname, gm_model, rot_mtx, tvec, results);
+
 }
