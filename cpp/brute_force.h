@@ -43,6 +43,7 @@ public:
 std::vector<double> computeErrors(const GMModel& gm_model, const std::vector<Dot>& dots, const SimpPlane& wall_plane);
 
 void runBruteForceSearch(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer);
+void sensitivityAnalysis(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params);
 void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer, int num_threads);
 
 

@@ -10,6 +10,7 @@
 #include <iostream>
 #include <list>
 #include <math.h>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -67,6 +68,16 @@ public:
 		return computeErrors(this_gm_model, dots, wall_plane);
 	}
 
+	std::string simpleString() const {
+		std::stringstream sstr;
+		sstr << yaw_delta << " " << pitch_delta << " " << roll_delta << " "
+				<< tx_delta << " " << ty_delta << " " << tz_delta << " "
+				<< ida_delta << " " << idb_delta << " "
+				<< ily_delta << " " << ilz_delta;
+
+		return sstr.str();
+	}
+
 	double yaw_delta, pitch_delta, roll_delta;
 	double tx_delta, ty_delta, tz_delta;
 	double ida_delta, idb_delta;
@@ -84,7 +95,11 @@ std::ostream& operator<<(std::ostream& ostr, const TestCase& tc) {
 std::vector<double> getValues(double range, double step, bool verbose, const std::string& prefix) {
 	std::vector<double> values;
 	for(double v = -range; v <= range; v += step) {
-		values.push_back(v);
+		if (fabs(v) < 0.000001) {
+			values.push_back(0.0);
+		} else {
+			values.push_back(v);
+		}
 		if(fabs(step) <= 0.000001) {
 			break;
 		}
@@ -347,6 +362,77 @@ void runBruteForceSearch(const std::vector<Dot>& dots, const GMModel& gm_model, 
 	std::cout << "Best lsq solution --> " << best_lsq_solution << std::endl;
 	std::cout << "Avg error: " << best_lsq_errs.average << std::endl;
 	std::cout << "Max error: " << best_lsq_errs.maximum << std::endl << std::endl;
+}
+
+void sensitivityAnalysis(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params) {
+	// Compute search values
+	std::vector<double> rot_values   = getValues(params.rot_range,   params.rot_step,   true, "Rot values");
+	std::vector<double> trans_values = getValues(params.trans_range, params.trans_step, true, "Trans values");
+	std::vector<double> idir_values  = getValues(params.idir_range,  params.idir_step,  true, "Input dir values");
+	std::vector<double> iloc_values  = getValues(params.iloc_range,  params.iloc_step,  true, "Input loc values");
+
+	int num_iterations = 3 * rot_values.size() + 3 * trans_values.size() + 2 * idir_values.size() + 2 * iloc_values.size();
+
+	std::cout << "Running " << num_iterations << " total iterations" << std::endl;
+
+	int ind = 0;
+	std::vector<int> indexes = {0, int(rot_values.size() / 2), int(rot_values.size() / 2),
+								int(trans_values.size() / 2), int(trans_values.size() / 2), int(trans_values.size() / 2),
+								int(idir_values.size() / 2), int(idir_values.size() / 2),
+								int(iloc_values.size() / 2), int(iloc_values.size() / 2)};
+	std::vector<int> lens = {int(rot_values.size()), int(rot_values.size()), int(rot_values.size()),
+							 int(trans_values.size()), int(trans_values.size()), int(trans_values.size()),
+							 int(idir_values.size()), int(idir_values.size()),
+							 int(iloc_values.size()), int(iloc_values.size())};
+
+	SimpPlane wall_plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0));
+
+	std::vector<std::vector<std::pair<TestCase, ErrorStats> > > all_results(10);
+
+	if(!gm_model.init_dir.angle_set) {
+		std::cerr << "Must set the angles of the initial direction for the burte force search" << std::endl;
+		exit(1);
+	}
+
+	while(ind < int(indexes.size())) {
+		double yaw_delta = rot_values[indexes[0]], pitch_delta = rot_values[indexes[1]], roll_delta = rot_values[indexes[2]];
+		double tx_delta = trans_values[indexes[3]], ty_delta = trans_values[indexes[4]], tz_delta = trans_values[indexes[5]];
+		double ida_delta = idir_values[indexes[6]], idb_delta = idir_values[indexes[7]];
+		double ily_delta = iloc_values[indexes[8]], ilz_delta = iloc_values[indexes[9]];
+
+		TestCase this_vals(yaw_delta, pitch_delta, roll_delta, tx_delta, ty_delta, tz_delta, ida_delta, idb_delta, ily_delta, ilz_delta);
+
+		std::vector<double> errors = this_vals.getErrors(rot_mtx, tvec, gm_model, dots, wall_plane);
+
+		ErrorStats this_stats = analyzeErrors(errors);
+
+		all_results[ind].push_back(std::make_pair(this_vals, this_stats));
+
+		indexes[ind]++;
+		if(indexes[ind] >= lens[ind]) {
+			indexes[ind] = int(lens[ind] / 2);
+			ind++;
+			if(ind < int(indexes.size())) {
+				indexes[ind] = 0;
+			}
+		}
+	}
+
+	// Write all_results to file
+	auto fname_time = std::chrono::high_resolution_clock::now();
+	auto fname_time_in_time_t = std::chrono::system_clock::to_time_t(fname_time);
+
+	char buf[80];
+	std::strftime(buf, sizeof(buf), "sens/sens-data_%b-%d_%H:%M:%S_%Z.txt", std::localtime(&fname_time_in_time_t));
+	std::ofstream ostr(buf, std::ofstream::out);
+
+	ostr << "rx ry rz tx ty tz ida idb ily ilz avg max" << std::endl;
+
+	for(unsigned int i = 0; i < all_results.size(); ++i) {
+		for(unsigned int j = 0; j < all_results[i].size(); ++j) {
+			ostr << all_results[i][j].first.simpleString() << " " << all_results[i][j].second.average << " " << all_results[i][j].second.maximum << std::endl;
+		}
+	}
 }
 
 void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer, int num_threads) {
@@ -615,9 +701,8 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	auto fname_time_in_time_t = std::chrono::system_clock::to_time_t(fname_time);
 
 	char buf[80];
-	std::strftime(buf, sizeof(buf), "out/output_%a-%b-%d_%H:%M:%S_%Z.txt", std::localtime(&fname_time_in_time_t));
+	std::strftime(buf, sizeof(buf), "out/output_%b-%d_%H:%M:%S_%Z.txt", std::localtime(&fname_time_in_time_t));
 
 	std::string out_fname(buf);
 	writeResultsToFile(out_fname, gm_model, rot_mtx, tvec, results);
-
 }

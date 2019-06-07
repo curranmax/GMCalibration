@@ -38,14 +38,17 @@ int main(int argc, char const *argv[]) {
 	// float idir_range = 0.0, idir_step = 0.0;
 	// float iloc_range = 0.0, iloc_step = 0.0;
 
-	float rot_range = 0.1, rot_step = 0.05;
-	float trans_range = 15.0, trans_step = 5.0;
-	float idir_range = 0.03, idir_step = 0.015;
-	float iloc_range = 50.0, iloc_step = 10.0;
+	float rot_range = 0.05, rot_step = 0.005;
+	float trans_range = 10.0, trans_step = 5.0;
+	float idir_range = 0.03, idir_step = 0.005;
+	float iloc_range = 10.0, iloc_step = 5.0;
 
 	BruteForceParams params(rot_range, rot_step, trans_range, trans_step, idir_range, idir_step, iloc_range, iloc_step);
 
 	gm_model.init_dir.computeAngles();
+
+	// sensitivityAnalysis(dots, gm_model, rot_mtx, tvec, params);
+
 
 	// Create Timer
 	Timer timer;
