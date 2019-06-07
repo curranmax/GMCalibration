@@ -54,7 +54,7 @@ int main(int argc, char const *argv[]) {
 	Timer timer;
 
 	// Run brute force
-	int num_cores = 63;
+	int num_cores = 20;
 	runBruteForceSearchMultThreaded(dots, gm_model, rot_mtx, tvec, params, timer, num_cores);
 
 	std::cout << "Average iteration time: " << timer.getAverageDuration("bf_iteration") * 1000.0 << " ms" << std::endl;

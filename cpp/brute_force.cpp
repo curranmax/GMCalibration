@@ -106,7 +106,7 @@ std::vector<double> getValues(double range, double step, bool verbose, const std
 	}
 
 	if(verbose) {
-		std::cout << prefix << ": ";
+		std::cout << prefix << " (len = " << values.size() << "): ";
 		for(unsigned int i = 0; i < values.size(); ++i) {
 			std::cout << values[i];
 			if(i < values.size() - 1) {
@@ -442,10 +442,6 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	std::vector<double> idir_values  = getValues(params.idir_range,  params.idir_step,  true, "Input dir values");
 	std::vector<double> iloc_values  = getValues(params.iloc_range,  params.iloc_step,  true, "Input loc values");
 
-	int num_iterations = pow(rot_values.size(), 3) * pow(trans_values.size(), 3) * pow(idir_values.size(), 2) * pow(iloc_values.size(), 2);
-
-	std::cout << "Running " << num_iterations << " total iterations" << std::endl;
-
 	std::vector<int> indexes = {0, 0, 0,
 								0, 0, 0,
 								0, 0,
@@ -454,6 +450,15 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 							 int(trans_values.size()), int(trans_values.size()), int(trans_values.size()),
 							 int(idir_values.size()), int(idir_values.size()),
 							 int(iloc_values.size()), int(iloc_values.size())};
+
+	typedef long long llong;
+	llong num_iterations = 1;
+	for(unsigned int i = 0; i < lens.size(); ++i) {
+		num_iterations *= lens[i];
+	}
+
+	std::cout << "Running " << num_iterations << " total iterations" << std::endl;
+
 
 	SimpPlane wall_plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0));
 
@@ -465,6 +470,8 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 		std::cerr << "Must set the angles of the initial direction for the burte force search" << std::endl;
 		exit(1);
 	}
+
+	exit(1);
 
 	#if USE_NCURSES
 	initscr();
@@ -490,7 +497,7 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	printw(cur_error_format.c_str(), "lsq", 0.0, 0.0);
 	refresh();
 
-	int cur_iter = 0;
+	llong cur_iter = 0;
 	int print_frequency = 1000;
 	auto start_bf = std::chrono::high_resolution_clock::now();
 	#endif
