@@ -471,8 +471,6 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 		exit(1);
 	}
 
-	exit(1);
-
 	#if USE_NCURSES
 	initscr();
 	std::string progress_format = "Progress: %f %\n";
