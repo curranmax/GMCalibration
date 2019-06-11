@@ -120,7 +120,61 @@ std::vector<double> getValues(double range, double step, bool verbose, const std
 	return values;
 }
 
+std::vector<int> computeIndexes(int val, const std::vector<long long>& digit_vals) {
+	int inputted_val = val;
+
+	std::vector<int> result(digit_vals.size());
+	for(unsigned int i = 0; i < digit_vals.size(); ++i) {
+		result[i] = val / digit_vals[i];
+		val = val - digit_vals[i] * result[i];
+	}
+
+	// for(unsigned int i = 0; i < result.size(); ++i) {
+	// 	std::cout << result[i];
+	// 	if(i < result.size() - 1) {
+	// 		std::cout << ", ";
+	// 	} else {
+	// 		std::cout << std::endl;
+	// 	}
+	// }
+
+	long long sum = 0;
+	for(unsigned int i = 0; i < result.size(); ++i) {
+		sum += ((long long)result[i]) * digit_vals[i];
+	}
+
+	if(sum != inputted_val) {
+		std::cerr << "Mismatching result: expected " << inputted_val << ", got " << sum << std::endl;
+		exit(1);
+	}
+
+	return result;
+}
+
 bool increment(std::vector<int>& indexes, const std::vector<int>& lens) {
+	for(int i = int(indexes.size()) - 1; i >= 0; --i) {
+		if(indexes[i] + 1 < lens[i]) {
+			indexes[i]++;
+			return true;
+		} else {
+			indexes[i] = 0;
+		}
+	}
+	return false;
+}
+
+bool increment(std::vector<int>& indexes, const std::vector<int>& lens, const std::vector<int>& ending_indexes) {
+	bool all_ending = true;
+	for(unsigned int i = 0; i < indexes.size(); ++i) {
+		if(indexes[i] != ending_indexes[i]) {
+			all_ending = false;
+			break;
+		}
+	}
+	if(all_ending) {
+		return false;
+	}
+
 	for(int i = int(indexes.size()) - 1; i >= 0; --i) {
 		if(indexes[i] + 1 < lens[i]) {
 			indexes[i]++;
@@ -179,13 +233,90 @@ ErrorStats getErrorStats(const TestCase& this_vals, const Matrix& rot_mtx, const
 	return analyzeErrors(errors);
 }
 
-void writeResultsToFile(const std::string fname, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const std::vector<std::pair<TestCase, ErrorStats> >& results) {
+void writeResultsToFile(const std::string fname, const BruteForceParams& params, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const std::vector<std::pair<TestCase, ErrorStats> >& results, const std::vector<int>& starting_indexes, const std::vector<int>& ending_indexes, const std::vector<long long>& digit_vals) {
 	std::ofstream ostr(fname, std::ofstream::out);
 
 	ostr << "Initial Data" << std::endl;
 	ostr << gm_model << std::endl;
 	ostr << "tvec " << tvec << std::endl;
 	ostr << "rmtx " << rot_mtx << std::endl;
+
+	ostr << std::endl << "----------------------------------" << std::endl << std::endl;
+
+	std::vector<double> rot_values   = getValues(params.rot_range,   params.rot_step,   false, "");
+	std::vector<double> trans_values = getValues(params.trans_range, params.trans_step, false, "");
+	std::vector<double> idir_values  = getValues(params.idir_range,  params.idir_step,  false, "");
+	std::vector<double> iloc_values  = getValues(params.iloc_range,  params.iloc_step,  false, "");
+
+	ostr << "rot_values ";
+	for(unsigned int i = 0; i < rot_values.size(); ++i) {
+		ostr << rot_values[i];
+		if(i < rot_values.size() - 1) {
+			ostr << ", ";
+		} else {
+			ostr << std::endl;
+		}
+	}
+
+	ostr << "trans_values ";
+	for(unsigned int i = 0; i < trans_values.size(); ++i) {
+		ostr << trans_values[i];
+		if(i < trans_values.size() - 1) {
+			ostr << ", ";
+		} else {
+			ostr << std::endl;
+		}
+	}
+
+	ostr << "idir_values ";
+	for(unsigned int i = 0; i < idir_values.size(); ++i) {
+		ostr << idir_values[i];
+		if(i < idir_values.size() - 1) {
+			ostr << ", ";
+		} else {
+			ostr << std::endl;
+		}
+	}
+
+	ostr << "iloc_values ";
+	for(unsigned int i = 0; i < iloc_values.size(); ++i) {
+		ostr << iloc_values[i];
+		if(i < iloc_values.size() - 1) {
+			ostr << ", ";
+		} else {
+			ostr << std::endl;
+		}
+	}
+
+	ostr << std::endl << "----------------------------------" << std::endl << std::endl;
+
+	ostr << "starting_indexes ";
+	long long starting_val = 0;
+	for(unsigned int i = 0; i < starting_indexes.size(); ++i) {
+		starting_val += digit_vals[i] * ((long long)starting_indexes[i]);
+
+		ostr << starting_indexes[i];
+		if(i < starting_indexes.size() - 1) {
+			ostr << " ";
+		} else {
+			ostr << std::endl;
+		}
+	}
+	ostr << "starting_val " << starting_val << std::endl;
+
+	ostr << "ending_indexes ";
+	long long ending_val = 0;
+	for(unsigned int i = 0; i < ending_indexes.size(); ++i) {
+		ending_val += digit_vals[i] * ((long long)ending_indexes[i]);
+
+		ostr << ending_indexes[i];
+		if(i < ending_indexes.size() - 1) {
+			ostr << " ";
+		} else {
+			ostr << std::endl;
+		}
+	}
+	ostr << "ending_val " << ending_val << std::endl;
 	
 	for(unsigned int i = 0; i < results.size(); ++i) {
 		ostr << std::endl << "----------------------------------" << std::endl << std::endl;
@@ -435,7 +566,7 @@ void sensitivityAnalysis(const std::vector<Dot>& dots, const GMModel& gm_model, 
 	}
 }
 
-void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer, int num_threads) {
+void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer, int num_threads, int this_split, int total_splits) {
 	// Compute search values
 	std::vector<double> rot_values   = getValues(params.rot_range,   params.rot_step,   true, "Rot values");
 	std::vector<double> trans_values = getValues(params.trans_range, params.trans_step, true, "Trans values");
@@ -459,6 +590,31 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 
 	std::cout << "Running " << num_iterations << " total iterations" << std::endl;
 
+	// Compute starting indexes and ending indexes
+	std::vector<int> starting_indexes;
+	std::vector<int> ending_indexes;
+	std::vector<llong> digit_vals = {1, 1, 1,
+									 1, 1, 1,
+									 1, 1,
+									 1, 1};
+	{
+		for(int i = (int)digit_vals.size() - 2; i >= 0; --i) {
+			digit_vals[i] = digit_vals[i + 1] * lens[i + 1];
+		}
+
+		// Range of values to compute (inclusive)
+		int this_start_val = int(num_iterations * (float(this_split - 1) / float(total_splits)));
+		int this_end_val   = int(num_iterations * (float(this_split) / float(total_splits))) - 1;
+
+		// end(n, n) must be num_iterations - 1
+		// start(1, n) must be 0
+		// start(x, n) must be end(x - 1, n) - 1
+
+		starting_indexes = computeIndexes(this_start_val, digit_vals);
+		ending_indexes   = computeIndexes(this_end_val, digit_vals);
+	}
+
+	indexes = starting_indexes;
 
 	SimpPlane wall_plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0));
 
@@ -608,7 +764,7 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 			}
 		}
 
-		if(!increment(indexes, lens)) {
+		if(!increment(indexes, lens, ending_indexes)) {
 			timer.end("bf_iteration");
 			break;
 		}
@@ -709,5 +865,5 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 	std::strftime(buf, sizeof(buf), "out/output_%b-%d_%H:%M:%S_%Z.txt", std::localtime(&fname_time_in_time_t));
 
 	std::string out_fname(buf);
-	writeResultsToFile(out_fname, gm_model, rot_mtx, tvec, results);
+	writeResultsToFile(out_fname, params, gm_model, rot_mtx, tvec, results, starting_indexes, ending_indexes, digit_vals);
 }
