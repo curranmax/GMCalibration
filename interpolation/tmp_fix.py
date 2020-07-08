@@ -14,11 +14,11 @@ if __name__ == '__main__':
 	old_vr_data = reduceVRData(old_vr_data, 100)
 	fix_vr_data = reduceVRData(fix_vr_data, 100)
 	
-	print len(old_vr_data)
-	print len(fix_vr_data)
+	print(len(old_vr_data))
+	print(len(fix_vr_data))
 
 	translation = sum((fix_dp.tvec - old_dp.tvec for old_dp, fix_dp in zip(old_vr_data, fix_vr_data)), Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(old_vr_data)))
-	print translation
+	print(translation)
 
 	tx_gm_model = getGMFromFile('../data/12-6/t_v3.txt')
 	new_tx_gm_model = tx_gm_model.move(rotMatrixFromAngles(0.0, 0.0, 0.0), translation)

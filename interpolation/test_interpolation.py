@@ -8,21 +8,21 @@ import random
 import matplotlib.pyplot as plt
 
 def analyzeError(errs, gm_name, io_names, convert_to_radians = True, plot = True):
-	for io, io_name in io_names.iteritems():
+	for io, io_name in io_names.items():
 		simp_errs = [abs(a[io] - b) for _, a, b in errs]
 
 		if convert_to_radians:
-			simp_errs = map(lambda x: x * 40.0 / 65536 * 3.14159 / 180.0 * 1000.0, simp_errs)
+			simp_errs = [x * 40.0 / 65536 * 3.14159 / 180.0 * 1000.0 for x in simp_errs]
 
 			unit = 'mrad'
 
 		else:
 			unit = 'gm units'
 
-		print 'Interpolation method:', io_name
-		print 'Avg', gm_name, 'error:', sum(simp_errs) / float(len(simp_errs)), unit
-		print 'Max', gm_name, 'error:', max(simp_errs), unit
-		print ''
+		print('Interpolation method:', io_name)
+		print('Avg', gm_name, 'error:', sum(simp_errs) / float(len(simp_errs)), unit)
+		print('Max', gm_name, 'error:', max(simp_errs), unit)
+		print('')
 
 	if plot:
 		xvs = [x for x, _, _ in errs]
@@ -30,7 +30,7 @@ def analyzeError(errs, gm_name, io_names, convert_to_radians = True, plot = True
 
 		plt.plot(xvs, cal, label = 'calc')
 
-		for io, io_name in io_names.iteritems():
+		for io, io_name in io_names.items():
 			est = [e[io] for _, e, _ in errs]
 			plt.plot(xvs, est, label = io_name)
 

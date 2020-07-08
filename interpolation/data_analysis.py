@@ -44,7 +44,7 @@ if __name__ == '__main__':
 		this_quad = getQuad(x, theta, quads_by_ind)
 
 		if this_quad is None:
-			print 'SKIPPED'
+			print('SKIPPED')
 			continue
 
 		tx1 = lambda v: v.tx1
@@ -57,8 +57,8 @@ if __name__ == '__main__':
 		int_rx1 = this_quad.interpolate(x, theta, rx1)
 		int_rx2 = this_quad.interpolate(x, theta, rx2)
 
-		print '----------------------'
+		print('----------------------')
 
-		print int_tx1, int_tx2, int_rx1, int_rx2
-		print al_dp.tx_gm1, al_dp.tx_gm2, al_dp.rx_gm1, al_dp.rx_gm2
+		print(int_tx1, int_tx2, int_rx1, int_rx2)
+		print(al_dp.tx_gm1, al_dp.tx_gm2, al_dp.rx_gm1, al_dp.rx_gm2)
 

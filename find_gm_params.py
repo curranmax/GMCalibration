@@ -117,7 +117,7 @@ class Vec:
 		self.i = 0
 		return self
 
-	def next(self):
+	def __next__(self):
 		if self.i < 3:
 			if self.i == 0:
 				v = self.x
@@ -186,14 +186,14 @@ class Matrix:
 		return Matrix(*vs)
 
 	def __mul__(self, mtx):
-		new_vals = [[sum(self.vals[rn][a] * mtx.vals[b][cn] for a, b in zip(range(3), range(3))) for cn in range(3)] for rn in range(3)]
+		new_vals = [[sum(self.vals[rn][a] * mtx.vals[b][cn] for a, b in zip(list(range(3)), list(range(3)))) for cn in range(3)] for rn in range(3)]
 		new_mtx = Matrix(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 		new_mtx.vals = new_vals
 
 		return new_mtx
 
 	def __str__(self):
-		return '\n'.join(map(lambda row: '[' + ', '.join(map(str, row)) + ']', self.vals))
+		return '\n'.join(['[' + ', '.join(map(str, row)) + ']' for row in self.vals])
 
 angle_algo = 'ypr'
 def rotMatrixFromAngles(a1, a2, a3):
@@ -250,11 +250,11 @@ class Quat:
 		return m
 
 	def mag(self):
-		return math.sqrt(sum(map(lambda v: pow(v, 2.0), (self.w, self.x, self.y, self.z))))
+		return math.sqrt(sum([pow(v, 2.0) for v in (self.w, self.x, self.y, self.z)]))
 
 	def norm(self):
 		m = self.mag()
-		return Quat(*map(lambda v: v / m, (self.w, self.x, self.y, self.z)))
+		return Quat(*[v / m for v in (self.w, self.x, self.y, self.z)])
 
 	def dist(self, q):
 		return math.sqrt(pow(self.w - q.w, 2.0) + pow(self.x - q.x, 2.0) + pow(self.y - q.y, 2.0) + pow(self.z - q.z, 2.0))
@@ -272,7 +272,7 @@ class Quat:
 					self.z + q.z)
 
 	def __str__(self):
-		return '(' + ', '.join(map(lambda v: v[0] + ': ' + str(v[1]), [('W', self.w), ('X', self.x), ('Y', self.y), ('Z', self.z)])) + ')'
+		return '(' + ', '.join([v[0] + ': ' + str(v[1]) for v in [('W', self.w), ('X', self.x), ('Y', self.y), ('Z', self.z)]]) + ')'
 
 class Plane:
 	def __init__(self, norm, point):
@@ -368,7 +368,7 @@ def getGMFromFile(fname):
 	for line in f:
 		token, x, y, z = line.split()
 
-		vec = Vec(*map(float, (x, y, z)))
+		vec = Vec(*list(map(float, (x, y, z))))
 
 		if token not in vals:
 			raise Exception('Unexpected token: ' + str(token))
@@ -500,8 +500,8 @@ def drawDots(collected_dots, gen_dots, out_fname = 'dot.jpg'):
 	brush_size = 10
 	brush_type = 'circle'
 	brush = []
-	for a in xrange(-brush_size, brush_size + 1, 1):
-		for b in xrange(-brush_size, brush_size + 1, 1):
+	for a in range(-brush_size, brush_size + 1, 1):
+		for b in range(-brush_size, brush_size + 1, 1):
 			valid = True
 			if brush_type == 'circle':
 				valid = (math.sqrt(pow(a, 2) + pow(b, 2)) <= brush_size)
@@ -634,7 +634,7 @@ def generateDots(gm, collected_dots, wall_plane, verbose = True):
 		dots.append(this_dot)
 
 	if verbose and behind_wall > 0:
-		print behind_wall, 'out of', len(collected_dots), 'are behind the wall'
+		print(behind_wall, 'out of', len(collected_dots), 'are behind the wall')
 
 	if verbose:
 		return dots
@@ -646,7 +646,7 @@ def getGridStats(dots):
 
 	xvecs = []
 	yvecs = []
-	for (x, y), dot in dots_by_ind.iteritems():
+	for (x, y), dot in dots_by_ind.items():
 		if (x + 1, y) in dots_by_ind:
 			xvecs.append(dots_by_ind[(x + 1, y)].loc - dot.loc)
 		if (x, y + 1) in dots_by_ind:
@@ -655,7 +655,7 @@ def getGridStats(dots):
 	avg_xvec = sum(xvecs, Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(xvecs)))
 	avg_yvec = sum(yvecs, Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(yvecs)))
 	
-	print avg_xvec.dot(avg_yvec)
+	print(avg_xvec.dot(avg_yvec))
 
 	prev_mag = avg_yvec.mag()
 	avg_yvec = (avg_yvec - avg_xvec.mult(avg_xvec.dot(avg_yvec) / avg_xvec.mag() / avg_yvec.mag())).norm().mult(prev_mag)
@@ -670,11 +670,11 @@ def calculateGridError(collected_dots, gen_dots, verbose = False):
 
 	if verbose:
 		# cx, cy, cx_errs, cy_errs = getGridStats(collected_dots)
-		print 'Angle between axes:', gx.angle(gy) * 180.0 / math.pi
-		print 'Avg x error:       ', sum(gx_errs) / float(len(gx_errs))
-		print 'Max x error:       ', max(gx_errs)
-		print 'Avg y error:       ', sum(gy_errs) / float(len(gy_errs))
-		print 'Max y error:       ', max(gy_errs)
+		print('Angle between axes:', gx.angle(gy) * 180.0 / math.pi)
+		print('Avg x error:       ', sum(gx_errs) / float(len(gx_errs)))
+		print('Max x error:       ', max(gx_errs))
+		print('Avg y error:       ', sum(gy_errs) / float(len(gy_errs)))
+		print('Max y error:       ', max(gy_errs))
 
 		# print 'Dif x mag:         ', gx.mag() - cx.mag()
 		# print 'Dif y mag:         ', gy.mag() - cy.mag()
@@ -905,12 +905,12 @@ def findRotAndTransParams(gm, R, T, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0),
 
 		solving_for.append('Quadratic Val Params')
 
-	print '\nSolving For:\n' + ', '.join(solving_for) + '\n'
+	print('\nSolving For:\n' + ', '.join(solving_for) + '\n')
 
 	min_bounds = [v - b for v, b in zip(init_guess, bound_vals)]
 	max_bounds = [v + b for v, b in zip(init_guess, bound_vals)]
 
-	print 'Stopping constraints:', all_data_stopping_constraints
+	print('Stopping constraints:', all_data_stopping_constraints)
 	rv = least_squares(f, tuple(init_guess), **all_data_stopping_constraints)
 
 	cost = rv.cost
@@ -1022,10 +1022,10 @@ def findRotAndTransParams(gm, R, T, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0),
 		err_of_dots  = [e for e, _ in dot_errs[:low_error_size]]
 		low_err_dots = [d for _, d in dot_errs[:low_error_size]]
 
-		print '\nRunning regression with only low error points:'
-		print 'Max error of low error points in full regression:', max(err_of_dots)
-		print 'Avg error of low error points in full regression:', sum(err_of_dots) / float(len(err_of_dots))
-		print ''
+		print('\nRunning regression with only low error points:')
+		print('Max error of low error points in full regression:', max(err_of_dots))
+		print('Avg error of low error points in full regression:', sum(err_of_dots) / float(len(err_of_dots)))
+		print('')
 
 		this_gm = GM(init_dir, init_point, Plane(m1_norm, m1_point), m1_axis, Plane(m2_norm, m2_point), m2_axis)
 
@@ -1072,18 +1072,18 @@ def calculateError(collected_dots, gen_dots):
 
 	drawHistogram(errors, n_bins = 10000, title = 'Error in GM Model')
 
-	print 'Average Error:', sum(errors) / float(len(errors)), 'mm'
-	print 'Max Error:    ', max(errors), 'mm'
+	print('Average Error:', sum(errors) / float(len(errors)), 'mm')
+	print('Max Error:    ', max(errors), 'mm')
 
 def differenceBetweenGM(gm1, gm2):
-	print 'Angle between initial beam:', gm1.init_dir.angle(gm2.init_dir)
-	print 'Distance between initial beam starts:', min(distanceToLine(gm1.init_point, gm1.init_dir, gm2.init_point), distanceToLine(gm2.init_point, gm2.init_dir, gm1.init_point))
-	print 'Angle between m1:', gm1.m1.norm.angle(gm2.m1.norm)
-	print 'Angle between a1:', gm1.a1.angle(gm2.a1)
-	print 'Distance between m1.point:', min(distanceToLine(gm1.m1.point, gm1.a1, gm2.m1.point), distanceToLine(gm2.m1.point, gm2.a1, gm1.m1.point))
-	print 'Angle between m2:', gm1.m2.norm.angle(gm2.m2.norm)
-	print 'Angle between a2:', gm1.a2.angle(gm2.a2)
-	print 'Distance between m2.point:', min(distanceToLine(gm1.m2.point, gm1.a2, gm2.m2.point), distanceToLine(gm2.m2.point, gm2.a2, gm1.m2.point))
+	print('Angle between initial beam:', gm1.init_dir.angle(gm2.init_dir))
+	print('Distance between initial beam starts:', min(distanceToLine(gm1.init_point, gm1.init_dir, gm2.init_point), distanceToLine(gm2.init_point, gm2.init_dir, gm1.init_point)))
+	print('Angle between m1:', gm1.m1.norm.angle(gm2.m1.norm))
+	print('Angle between a1:', gm1.a1.angle(gm2.a1))
+	print('Distance between m1.point:', min(distanceToLine(gm1.m1.point, gm1.a1, gm2.m1.point), distanceToLine(gm2.m1.point, gm2.a1, gm1.m1.point)))
+	print('Angle between m2:', gm1.m2.norm.angle(gm2.m2.norm))
+	print('Angle between a2:', gm1.a2.angle(gm2.a2))
+	print('Distance between m2.point:', min(distanceToLine(gm1.m2.point, gm1.a2, gm2.m2.point), distanceToLine(gm2.m2.point, gm2.a2, gm1.m2.point)))
 
 def rangeOfLaunchPoint(gm):
 	pc, _ = gm.getOutput(pow(2, 15), pow(2, 15))
@@ -1099,10 +1099,10 @@ def rangeOfLaunchPoint(gm):
 	p_ph_nv, _ = gm.getOutput(pow(2, 16), 0)
 	p_ph_pv, _ = gm.getOutput(pow(2, 16), pow(2, 16))
 
-	cross_dists = map(lambda p: p.dist(pc), [p_nh, p_ph, p_nv, p_pv])
-	corner_dists = map(lambda p: p.dist(pc), [p_nh_nv, p_nh_pv, p_ph_nv, p_ph_pv])
+	cross_dists = [p.dist(pc) for p in [p_nh, p_ph, p_nv, p_pv]]
+	corner_dists = [p.dist(pc) for p in [p_nh_nv, p_nh_pv, p_ph_nv, p_ph_pv]]
 
-	print 'Max distance between center launch point and extremes:', max(cross_dists + corner_dists)
+	print('Max distance between center launch point and extremes:', max(cross_dists + corner_dists))
 
 # Drawing histograms
 def drawHistogram(errs, n_bins = 100, title = '', x_label = 'Error (mm)', y_label = 'CDF'):
@@ -1122,7 +1122,7 @@ def getTXInitData():
 	global angle_algo
 	angle_algo = 'ypr'
 
-	print '\nSolving for TX GM\n'
+	print('\nSolving for TX GM\n')
 	collected_dots = getDotsFromFile('data/12-2/tx_board_data_12-2.txt')
 	
 	# init_dir = vecFromAngle(0.0, 0.0)
@@ -1149,7 +1149,7 @@ def getRXInitData():
 	global angle_algo
 	angle_algo = 'ypr'
 
-	print '\nSolving for RX GM\n'
+	print('\nSolving for RX GM\n')
 	collected_dots = getDotsFromFile('data/12-2/rx_board_data_12-2.txt')
 
 	y_filter = 53.08 * 5 + 0.1
@@ -1192,25 +1192,25 @@ if __name__ == '__main__':
 									modify_linear_val_params = False, modify_quadratic_val_params = False,
 									low_error_size = None)
 
-	print 'Rotation Matrix:'
-	print R
-	print 'Rotation Angles:   ', R.getAngles()
-	print 'Translation Vector:', T
-	print 'Initial direction: ', init_dir
-	print 'Initial dir angles:', init_dir.getAngles()
-	print 'Initial point:     ', init_point
-	print 'M1 norm:           ', m1_norm
-	print 'M1 norm angles:    ', m1_norm.getAngles()
-	print 'M1 point:          ', m1_point
-	print 'M1 axis:           ', m1_axis
-	print 'M1 axis angles:    ', m1_axis.getAngles()
-	print 'M2 norm:           ', m2_norm
-	print 'M2 norm angles:    ', m2_norm.getAngles()
-	print 'M2 point:          ', m2_point
-	print 'M2 axis:           ', m2_axis
-	print 'M2 axis angles:    ', m2_axis.getAngles()
-	print 'Convert val params:', val_params
-	print ''
+	print('Rotation Matrix:')
+	print(R)
+	print('Rotation Angles:   ', R.getAngles())
+	print('Translation Vector:', T)
+	print('Initial direction: ', init_dir)
+	print('Initial dir angles:', init_dir.getAngles())
+	print('Initial point:     ', init_point)
+	print('M1 norm:           ', m1_norm)
+	print('M1 norm angles:    ', m1_norm.getAngles())
+	print('M1 point:          ', m1_point)
+	print('M1 axis:           ', m1_axis)
+	print('M1 axis angles:    ', m1_axis.getAngles())
+	print('M2 norm:           ', m2_norm)
+	print('M2 norm angles:    ', m2_norm.getAngles())
+	print('M2 point:          ', m2_point)
+	print('M2 axis:           ', m2_axis)
+	print('M2 axis angles:    ', m2_axis.getAngles())
+	print('Convert val params:', val_params)
+	print('')
 
 	# Find rotation and translation that best matches data
 	opt_gm = GM(init_dir, init_point, Plane(m1_norm, m1_point), m1_axis, Plane(m2_norm, m2_point), m2_axis, mirror_thickness = init_gm.mirror_thickness, val_params = val_params)

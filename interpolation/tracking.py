@@ -21,8 +21,8 @@ class BruteForceTracking:
 
 		best_gm1_val = None
 		best_gm2_val = None
-		for gm1_val in xrange(0, pow(2, 16), self.step):
-			for gm2_val in xrange(0, pow(2, 16), self.step):
+		for gm1_val in range(0, pow(2, 16), self.step):
+			for gm2_val in range(0, pow(2, 16), self.step):
 				p, d = gm.getOutput(gm1_val, gm2_val)
 				dist, neg = distanceToLine(p, d, target_point)
 
@@ -91,7 +91,7 @@ class ScipyTracking:
 		if self.rt == 'float':
 			return gm1_val, gm2_val
 		elif self.rt == 'int':
-			gm1_val, gm2_val = map(lambda x: int(round(x)), [gm1_val, gm2_val])
+			gm1_val, gm2_val = [int(round(x)) for x in [gm1_val, gm2_val]]
 			return gm1_val, gm2_val
 
 # Find a and b such that the distance between p + a*da + b*db and t 
@@ -137,7 +137,7 @@ class LinkSearchTracking:
 			tx_gmh, tx_gmv = self.inner_tracking(tx_gm, rx_point)
 			rx_gmh, rx_gmv = self.inner_tracking(rx_gm, tx_point)
 
-			if all(map(lambda x: abs(x[0] - x[1]) < 1.0, [(prev_tx_gmh, tx_gmh), (prev_tx_gmv, tx_gmv), (prev_rx_gmh, rx_gmh), (prev_rx_gmv, rx_gmv)])):
+			if all([abs(x[0] - x[1]) < 1.0 for x in [(prev_tx_gmh, tx_gmh), (prev_tx_gmv, tx_gmv), (prev_rx_gmh, rx_gmh), (prev_rx_gmv, rx_gmv)]]):
 				break
 
 		return tx_gmh, tx_gmv, rx_gmh, rx_gmv

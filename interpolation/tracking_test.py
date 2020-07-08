@@ -24,8 +24,8 @@ class BruteForceTracking:
 
 		best_gm1_val = None
 		best_gm2_val = None
-		for gm1_val in xrange(0, pow(2, 16), self.step):
-			for gm2_val in xrange(0, pow(2, 16), self.step):
+		for gm1_val in range(0, pow(2, 16), self.step):
+			for gm2_val in range(0, pow(2, 16), self.step):
 				p, d = gm.getOutput(gm1_val, gm2_val)
 				dist, neg = distanceToLine(p, d, target_point)
 
@@ -94,7 +94,7 @@ class ScipyTracking:
 		if self.rt == 'float':
 			return gm1_val, gm2_val
 		elif self.rt == 'int':
-			gm1_val, gm2_val = map(lambda x: int(round(x)), [gm1_val, gm2_val])
+			gm1_val, gm2_val = [int(round(x)) for x in [gm1_val, gm2_val]]
 			return gm1_val, gm2_val
 
 # Find a and b such that the distance between p + a*da + b*db and t 
@@ -152,12 +152,12 @@ def testTracking(gm, num_points = 1, tracking = BruteForceTracking(pow(2, 7))):
 			raise Exception('Point is behind GM')
 
 		errors.append(dist)
-	print ''
-	print 'Average error:', sum(errors) / float(len(errors))
-	print 'Maximum error:', max(errors)
-	print ''
-	print 'Average duration:', sum(durs) / float(len(durs))
-	print 'Maximum duration:', max(durs)
+	print('')
+	print('Average error:', sum(errors) / float(len(errors)))
+	print('Maximum error:', max(errors))
+	print('')
+	print('Average duration:', sum(durs) / float(len(durs)))
+	print('Maximum duration:', max(durs))
 
 def testTrackingAgainstDots(gm, dots, tracking = BruteForceTracking(pow(2, 10))):
 	durs = []
@@ -180,15 +180,15 @@ def testTrackingAgainstDots(gm, dots, tracking = BruteForceTracking(pow(2, 10)))
 
 		dist_errors.append(dist)
 
-	print ''
-	print 'Average gm_error:', sum(gm_errors) / float(len(gm_errors))
-	print 'Maximum gm_error:', max(gm_errors)
-	print ''
-	print 'Average dist_error:', sum(dist_errors) / float(len(dist_errors))
-	print 'Maximum dist_error:', max(dist_errors)
-	print ''
-	print 'Average duration:', sum(durs) / float(len(durs))
-	print 'Maximum duration:', max(durs)
+	print('')
+	print('Average gm_error:', sum(gm_errors) / float(len(gm_errors)))
+	print('Maximum gm_error:', max(gm_errors))
+	print('')
+	print('Average dist_error:', sum(dist_errors) / float(len(dist_errors)))
+	print('Maximum dist_error:', max(dist_errors))
+	print('')
+	print('Average duration:', sum(durs) / float(len(durs)))
+	print('Maximum duration:', max(durs))
 
 class LinkSearchTracking:
 	def __init__(self, n_iters, inner_tracking):
@@ -216,7 +216,7 @@ class LinkSearchTracking:
 			# post_rx_point, post_rx_dir = rx_gm.getOutput(rx_gmh, rx_gmv)
 			# print distanceToLine(post_rx_point, post_rx_dir, tx_point)
 
-			if all(map(lambda x: abs(x[0] - x[1]) < 1.0, [(prev_tx_gmh, tx_gmh), (prev_tx_gmv, tx_gmv), (prev_rx_gmh, rx_gmh), (prev_rx_gmv, rx_gmv)])):
+			if all([abs(x[0] - x[1]) < 1.0 for x in [(prev_tx_gmh, tx_gmh), (prev_tx_gmv, tx_gmv), (prev_rx_gmh, rx_gmh), (prev_rx_gmv, rx_gmv)]]):
 				break
 
 		return tx_gmh, tx_gmv, rx_gmh, rx_gmv, i
@@ -271,11 +271,11 @@ def fullLinkTracking(tx_gm, rx_rel_gm, num_points = 1, real_points = None, track
 
 			if real_points[i].tracking_method == 'Model':
 				if any(abs(cv - pv) > 1 for cv, pv in zip(cpp_vals, python_vals)):
-					print 'Mismatch'
+					print('Mismatch')
 
 			if real_points[i].tracking_method == '2-D_Interpolation':
 				if any(abs(cv - iv) > 1 for cv, iv in zip(cpp_vals, interop_vals)):
-					print 'Mismatch'
+					print('Mismatch')
 
 		tx_point, tx_dir = tx_gm.getOutput(tx_gmh, tx_gmv)
 		rx_point, rx_dir = this_rx_gm.getOutput(rx_gmh, rx_gmv)
@@ -290,14 +290,14 @@ def fullLinkTracking(tx_gm, rx_rel_gm, num_points = 1, real_points = None, track
 		rx_errs.append(rx_dist)
 
 
-	print 'Max tx err:', max(tx_errs) * 1000.0, 'mm'
-	print 'Avg tx err:', sum(tx_errs) / float(len(tx_errs)) * 1000.0, 'mm'
-	print 'Max rx err:', max(rx_errs) * 1000.0, 'mm'
-	print 'Avg rx err:', sum(rx_errs) / float(len(rx_errs)) * 1000.0, 'mm'
+	print('Max tx err:', max(tx_errs) * 1000.0, 'mm')
+	print('Avg tx err:', sum(tx_errs) / float(len(tx_errs)) * 1000.0, 'mm')
+	print('Max rx err:', max(rx_errs) * 1000.0, 'mm')
+	print('Avg rx err:', sum(rx_errs) / float(len(rx_errs)) * 1000.0, 'mm')
 
-	print ''
-	print 'Max dur:', max(durs) * 1000.0, 'ms'
-	print 'Avg dur:', sum(durs) / float(len(durs)) * 1000.0, 'ms'
+	print('')
+	print('Max dur:', max(durs) * 1000.0, 'ms')
+	print('Avg dur:', sum(durs) / float(len(durs)) * 1000.0, 'ms')
 
 if __name__ == '__main__':
 	tx_gm = getGMFromFile('../data/2-2/tx_gm_vr_2-2.txt')
