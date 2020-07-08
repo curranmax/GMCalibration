@@ -42,7 +42,6 @@ public:
 	std::pair<int, int> getInput(const Vec& target_point) const;
 
 	GMModel move(const Matrix& rot_mtx, const Vec& tvec) const;
-	GMModel moveWithNewInitBeam(const Matrix& rot_mtx, const Vec& tvec, const Vec& new_init_dir, const Vec& new_init_point) const;
 
 	Vec init_dir, init_point;
 

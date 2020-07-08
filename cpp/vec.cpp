@@ -48,9 +48,11 @@ Vec Vec::mult(double v) const {
 				this->z * v);
 }
 
-void Vec::normalize() {
+const Vec& Vec::normalize() {
 	double m = this->mag();
 	x /= m; y /= m; z /= m;
+
+	return *this;
 }
 
 Vec Vec::operator+(const Vec& vec) const {
@@ -65,24 +67,10 @@ Vec Vec::operator-(const Vec& vec) const {
 				this->z - vec.z);
 }
 
-void Vec::computeAngles() {
-	if(angle_set) {
-		return;
-	}
-
-	this->a1 = atan2(this->z, this->x);
-	this->a2 = atan2(this->y, sqrt(pow(this->x, 2.0) + pow(this->z, 2.0)));
-
-	angle_set = true;
-}
-
 Vec vecFromAngle(double alpha, double beta) {
-	Vec v(cos(alpha) * cos(beta),
-			sin(beta),
-			sin(alpha) * cos(beta));
-
-	v.setAngles(alpha, beta);
-	return v;
+	return Vec(cos(alpha) * cos(beta),
+				sin(beta),
+				sin(alpha) * cos(beta));
 }
 
 std::ostream& operator<<(std::ostream& ostr, const Vec& vec) {

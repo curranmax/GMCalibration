@@ -11,12 +11,6 @@ Vec Matrix::mult(const Vec& vec) const {
 				g * vec.x + h * vec.y + i * vec.z);
 }
 
-Matrix Matrix::mult(const Matrix& mtx) const {
-	return Matrix(a * mtx.a + b * mtx.d + c * mtx.g,  a * mtx.b + b * mtx.e + h * mtx.h,  a * mtx.c + b * mtx.f + c * mtx.i,
-				  d * mtx.a + e * mtx.d + f * mtx.g,  d * mtx.b + e * mtx.e + f * mtx.h,  d * mtx.c + e * mtx.f + f * mtx.i,
-				  g * mtx.a + h * mtx.d + i * mtx.g,  g * mtx.b + h * mtx.e + i * mtx.h,  g * mtx.c + h * mtx.f + i * mtx.i);
-}
-
 Matrix rotMatrixFromAngles(double theta, double alpha, double beta) {
 	double w = cos(theta);
 
@@ -24,17 +18,6 @@ Matrix rotMatrixFromAngles(double theta, double alpha, double beta) {
 	double x = v.x; double y = v.y; double z = v.z;
 	
 	return rotMatrixFromQuat(w, x, y, z);	
-}
-
-Matrix rotMatrixFromYPR(double yaw, double pitch, double roll) {
-	Matrix mx = rotMatrixAboutAxis(Vec(1.0, 0.0, 0.0), yaw);
-	Matrix my = rotMatrixAboutAxis(Vec(0.0, 1.0, 0.0), pitch);
-	Matrix mz = rotMatrixAboutAxis(Vec(0.0, 0.0, 1.0), roll);
-
-	Matrix final = (mx.mult(my)).mult(mz);
-
-	final.setAngles(yaw, pitch, roll);
-	return final;
 }
 
 Matrix rotMatrixFromQuat(double w, double x, double y, double z) {
@@ -73,9 +56,9 @@ Matrix rotMatrixAboutAxis(Vec vec, double theta) {
 }
 
 std::ostream& operator<<(std::ostream& ostr, const Matrix& matrix) {
-	ostr << "[(" << matrix.a << ", " << matrix.b << ", " << matrix.c << "), (" <<
-					matrix.d << ", " << matrix.e << ", " << matrix.f << "), (" <<
-					matrix.g << ", " << matrix.h << ", " << matrix.i << ")]";
+	ostr << matrix.a << "   " << matrix.b << "   " << matrix.c << std::endl <<
+			matrix.d << "   " << matrix.e << "   " << matrix.f << std::endl <<
+			matrix.g << "   " << matrix.h << "   " << matrix.i << std::endl;
 
 	return ostr;
 }

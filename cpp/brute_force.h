@@ -46,5 +46,6 @@ void runBruteForceSearch(const std::vector<Dot>& dots, const GMModel& gm_model, 
 void sensitivityAnalysis(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params);
 void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer, int num_threads, int this_split, int total_splits);
 
+void runSimpleMinimization(int num_tests, const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer);
 
 #endif

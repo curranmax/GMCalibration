@@ -5,9 +5,11 @@ import math
 import copy
 import random
 
+import matplotlib.pyplot as plt
+
 from scipy.optimize import least_squares, fsolve
 
-# TODO make everything in meters
+all_data_stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': 1e4}
 
 # Angles are in radians
 def vecFromAngle(alpha, beta):
@@ -27,6 +29,14 @@ def projectToPlane(vec, norm):
 
 def reflect(in_dir, norm):
 	return in_dir - norm.mult(2.0 * in_dir.dot(norm))
+
+def findK(p_0, d, t):
+	k = d.dot(t - p_0) / pow(d.mag(), 2.0)
+	return k
+
+def distanceToLine(p_0, d, t):
+	k = findK(p_0, d, t)
+	return (p_0 + d.mult(k)).dist(t), k < 0.0
 
 class Vec:
 	def __init__(self, x, y, z):
@@ -58,6 +68,8 @@ class Vec:
 		return self.x * vec.x + self.y * vec.y + self.z * vec.z
 
 	def angle(self, vec):
+		if self.dot(vec) / self.mag() / vec.mag() > 0.9999999999999999999999999999999999999:
+			return 0.0
 		return math.acos(self.dot(vec) / self.mag() / vec.mag())
 
 	def signedAngle(self, vec, norm):
@@ -69,7 +81,9 @@ class Vec:
 		return theta
 
 	def cross(self, vec):
-		return Vec(self.y * vec.z - self.z * vec.y, self.z * vec.x - self.x * vec.z, self.x * vec.y - self.y * vec.x)
+		return Vec(self.y * vec.z - self.z * vec.y,
+					self.z * vec.x - self.x * vec.z,
+					self.x * vec.y - self.y * vec.x)
 
 	def mult(self, v):
 		return Vec(self.x * v,
@@ -141,21 +155,57 @@ class Matrix:
 					 [float(d), float(e), float(f)],
 					 [float(g), float(h), float(i)]]
 
-		self.theta, self.alpha, self.beta = None, None, None
+		self.a1, self.a2, self.a3 = None, None, None
 
-	def mult(self, vec):
-		return Vec(sum(a * b for a, b in zip(vec, self.vals[0])),
-					sum(a * b for a, b in zip(vec, self.vals[1])),
-					sum(a * b for a, b in zip(vec, self.vals[2])))
+	def mult(self, v):
+		if isinstance(v, Vec):
+			return Vec(sum(a * b for a, b in zip(v, self.vals[0])),
+						sum(a * b for a, b in zip(v, self.vals[1])),
+						sum(a * b for a, b in zip(v, self.vals[2])))
+		elif type(v) is float or type(v) is int:
+			vs = [x * v for r in self.vals for x in r]
+			return Matrix(*vs)
+		else:
+			raise Exception('Unexpected argument: ' + str(v))
+
+
+
+	def transpose(self):
+		return Matrix(self.vals[0][0],self.vals[1][0], self.vals[2][0],
+						self.vals[0][1],self.vals[1][1], self.vals[2][1],
+						self.vals[0][2],self.vals[1][2], self.vals[2][2])
 
 	def getAngles(self):
-		if self.theta is None and self.alpha is None and self.beta is None:
+		if self.a1 is None and self.a2 is None and self.a3 is None:
 			raise Exception('Cannot compute angle from rot matrix yet')
 
-		return self.theta, self.alpha, self.beta
+		return self.a1, self.a2, self.a3
+
+	def __add__(self, mtx):
+		vs = [v1 + v2 for r1, r2 in zip(self.vals, mtx.vals) for v1, v2 in zip(r1, r2)]
+		return Matrix(*vs)
+
+	def __mul__(self, mtx):
+		new_vals = [[sum(self.vals[rn][a] * mtx.vals[b][cn] for a, b in zip(range(3), range(3))) for cn in range(3)] for rn in range(3)]
+		new_mtx = Matrix(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+		new_mtx.vals = new_vals
+
+		return new_mtx
 
 	def __str__(self):
 		return '\n'.join(map(lambda row: '[' + ', '.join(map(str, row)) + ']', self.vals))
+
+angle_algo = 'ypr'
+def rotMatrixFromAngles(a1, a2, a3):
+	global angle_algo
+	if angle_algo == 'quat':
+		return quatFromAngle(a1, a2, a3).toRotMatrix()
+
+	if angle_algo == 'ypr':
+		mtx = rotMatrix(Vec(1.0, 0.0, 0.0), a1) * rotMatrix(Vec(0.0, 1.0, 0.0), a2) * rotMatrix(Vec(0.0, 0.0, 1.0), a3)
+		mtx.a1, mtx.a2, mtx.a3 = a1, a2, a3
+
+		return mtx
 
 def quatFromAngle(theta, alpha, beta):
 	v = vecFromAngle(alpha, beta).mult(math.sin(theta))
@@ -166,6 +216,11 @@ def quatFromAngle(theta, alpha, beta):
 	q.beta  = beta
 
 	return q
+
+# Takes a list of unit-quats and returns the average unit-quat
+def computeAvgQuat(quats):
+	avg_quat = sum((q for q in quats), Quat(0.0, 0.0, 0.0, 0.0)).mult(1.0 / float(len(quats)))
+	return avg_quat.mult(1.0 / avg_quat.mag())
 
 class Quat:
 	def __init__(self, w, x, y, z):
@@ -191,8 +246,33 @@ class Quat:
 
 		m = Matrix(a, b, c, d, e, f, g, h, i)
 
-		m.theta, m.alpha, m.beta = self.theta, self.alpha, self.beta
+		m.a1, m.a2, m.a3 = self.theta, self.alpha, self.beta
 		return m
+
+	def mag(self):
+		return math.sqrt(sum(map(lambda v: pow(v, 2.0), (self.w, self.x, self.y, self.z))))
+
+	def norm(self):
+		m = self.mag()
+		return Quat(*map(lambda v: v / m, (self.w, self.x, self.y, self.z)))
+
+	def dist(self, q):
+		return math.sqrt(pow(self.w - q.w, 2.0) + pow(self.x - q.x, 2.0) + pow(self.y - q.y, 2.0) + pow(self.z - q.z, 2.0))
+
+	def mult(self, v):
+		return Quat(self.w * v,
+					self.x * v,
+					self.y * v,
+					self.z * v)
+
+	def __add__(self, q):
+		return Quat(self.w + q.w,
+					self.x + q.x,
+					self.y + q.y,
+					self.z + q.z)
+
+	def __str__(self):
+		return '(' + ', '.join(map(lambda v: v[0] + ': ' + str(v[1]), [('W', self.w), ('X', self.x), ('Y', self.y), ('Z', self.z)])) + ')'
 
 class Plane:
 	def __init__(self, norm, point):
@@ -220,21 +300,44 @@ class Plane:
 		intersection_point = d.mult(k) + p
 		return intersection_point, (k < 0.0)
 
-def gmValToRadian(gm_val):
-	return (40.0 / pow(2.0, 16.0) * gm_val - 20.0) * math.pi / 180.0
+	def __str__(self):
+		return '{Normal: ' + str(self.norm) + ', Point:'  + str(self.point) + '}'
+
+def gmValToRadian(gm_val, params = None):
+	voltage = gmValToVoltage(gm_val)
+	radian  = voltageToRadian(voltage, params = params)
+	return radian
+
+def gmValToVoltage(gm_val):
+	voltage = 20.0 / pow(2.0, 16.0) * gm_val - 10.0
+	return voltage
+
+def voltageToRadian(voltage, params = None):
+	if params is None:
+		# Default linear function
+		return -2.0 * math.pi / 180.0 * voltage
+
+	if len(params) == 1:
+		# Linear function
+		return params[0] * voltage
+
+	if len(params) == 2:
+		return params[0] * voltage + params[1] * pow(voltage, 2.0)
+
+	raise Exception('Unexpected value of params: ' + str(params))
 
 def getGMFromCAD(init_dir, init_point):
 	# gm = GM(init_dir, init_point,
-	# 		Plane(Vec(-0.183253086052, 0.68303422983, -0.707023724721), Vec(4.33404917057, 2.9865539516, 1.50005588143)),
-	# 		Vec(0.965927222809, 0.258813833165, 0.0),
-	# 		Plane(Vec(0.793391693847, -0.608711442422, 0.0), Vec(4.02024772148, 4.46917730708, 1.41303253915)),
+	# 		Plane(Vec(-0.183253086052, 0.68303422983, -0.707023724721), Vec(43.3404917057, 29.865539516, 15.0005588143)),
+	# 		Vec(0.965927222808, 0.258813833165, 0.0),
+	# 		Plane(Vec(0.793391693847, -0.608711442422, 0.0), Vec(40.2024772148, 44.6917730708, 14.1303253915)),
 	# 		Vec(0.0, 0.0, -1.0))
 
 	gm = GM(init_dir, init_point,
-			Plane(Vec(-0.68303422983, -0.707023724721,  0.183253086052), Vec(-2.9865539516, 1.50005588143, -4.33404917057)),
-			Vec(-0.258813833165, 0.0, -0.965927222809),
-			Plane(Vec(0.608711442422, 0.0, -0.793391693847), Vec(-4.46917730708, 1.41303253915, -4.02024772148)),
-			Vec(0.0, 1.0, 0.0))
+			Plane(Vec(-0.707023724726, 0.683034229835, 0.183253086053), Vec(15.0005588143, 29.865539516, -43.3404917057)),
+			Vec(0.0, 0.258813833165, -0.965927222808),
+			Plane(Vec(0.0, -0.608711442422, -0.793391693847), Vec(14.1303253915, 44.6917730708, -40.2024772148)),
+			Vec(-1.0, 0.0, 0.0))
 
 	return gm
 
@@ -280,7 +383,7 @@ def getGMFromFile(fname):
 	return gm
 
 class GM:
-	def __init__(self, init_dir, init_point, m1, a1, m2, a2):
+	def __init__(self, init_dir, init_point, m1, a1, m2, a2, mirror_thickness = 0.0, val_params = None):
 		# init_dir and init_point are Vecs, and are the direction and location of the initial laser beam
 		self.init_dir = init_dir
 		self.init_point = init_point
@@ -297,17 +400,38 @@ class GM:
 		self.a1.norm()
 		self.a2.norm()
 
+		self.mirror_thickness = mirror_thickness
+		self.m1.point = self.m1.point
+		self.m2.point = self.m2.point
+
+		self.val_params = val_params
+
+	def scale(self, v):
+		self.init_point = self.init_point.mult(v)
+		self.m1.point   = self.m1.point.mult(v)
+		self.m2.point   = self.m2.point.mult(v)
+
 	# Creates a new GM that is 1) rotated using the supplied rotation matrix, and 2) translated by trans_vec
 	def move(self, rot_matrix, trans_vec):
 		rot = lambda x: rot_matrix.mult(x)
 		rot_and_trans = lambda x: rot_matrix.mult(x) + trans_vec
 		return GM(rot(self.init_dir), rot_and_trans(self.init_point),
 					Plane(rot(self.m1.norm), rot_and_trans(self.m1.point)), rot(self.a1),
-					Plane(rot(self.m2.norm), rot_and_trans(self.m2.point)), rot(self.a2))
+					Plane(rot(self.m2.norm), rot_and_trans(self.m2.point)), rot(self.a2),
+					mirror_thickness = self.mirror_thickness, val_params = self.val_params)
 
 	def getOutput(self, gm1_val, gm2_val, check_intersection = False):
-		this_m1 = self.m1.rotate(self.a1, gmValToRadian(gm1_val))
-		this_m2 = self.m2.rotate(self.a2, gmValToRadian(gm2_val))
+		# print 'GM1 angle:', gmValToRadian(gm1_val)
+		# print 'GM2 angle:', gmValToRadian(gm2_val)
+
+		this_m1 = self.m1.rotate(self.a1, gmValToRadian(gm1_val, params = self.val_params))
+		this_m2 = self.m2.rotate(self.a2, gmValToRadian(gm2_val, params = self.val_params))
+
+		this_m1.point = this_m1.point + this_m1.norm.mult(self.mirror_thickness)
+		this_m2.point = this_m2.point + this_m2.norm.mult(self.mirror_thickness)
+
+		# print 'M1:', this_m1
+		# print 'M2:', this_m2
 
 		intersect = True
 
@@ -350,6 +474,8 @@ class Dot:
 		self.gmv = gmv
 
 		self.loc = loc
+
+		self.x_ind, self.y_ind = None, None
 
 		self.corner_ind = None
 
@@ -404,7 +530,8 @@ def drawDots(collected_dots, gen_dots, out_fname = 'dot.jpg'):
 
 			for a, b in brush:
 				if yp + a >= 0 and yp + a < height and xp + b >= 0 and xp + b < width:
-					img[yp + a][xp + b][channel] = 255
+					if channel == 1:
+						img[yp + a][xp + b][channel] = 255
 
 					if d.corner_ind != None:
 						img[yp + a][xp + b] = corner_colors[d.corner_ind]
@@ -419,8 +546,17 @@ def getDotsFromFile(filename):
 	dots = []
 
 	corners = []
-	if filename == 'data/2-14/data_2-14.txt':
+	if filename =='data/2-14/data_2-14.txt':
 		corners = [Vec(0.0, 0.0, 0.0), Vec(666.0, 0.0, 0.0), Vec(0.0, 481.0, 0.0), Vec(666.0, 481.0, 0.0)]
+
+	if filename == 'data/2-26/data_2-26.txt':
+		corners = [Vec(0.0, 0.0, 0.0), Vec(662.4, 0.0, 0.0), Vec(0.0, 478.4, 0.0), Vec(662.4, 478.4, 0.0)]
+
+	if filename == 'data/3-15/data_3-15.txt':
+		corners = [Vec(0.0, 0.0, 0.0), Vec(664.2, 0.0, 0.0), Vec(0.0, 516.6, 0.0), Vec(664.2, 516.6, 0.0)]
+
+	if filename == 'data/5-21/dot_data_5-21.txt':
+		corners = [Vec(0.0, 0.0, 0.0), Vec(1061.6, 0.0, 0.0), Vec(0.0, 796.2, 0.0), Vec(1061.6, 796.2, 0.0)]
 
 	for line in f:
 		if cols == None:
@@ -442,6 +578,36 @@ def getDotsFromFile(filename):
 					this_dot.corner_ind = i
 
 			dots.append(this_dot)
+
+	f.close()
+
+	xvals = set(d.loc.x for d in dots)
+	yvals = set(d.loc.y for d in dots)
+
+	xvals = sorted(list(xvals))
+	yvals = sorted(list(yvals))
+
+	for d in dots:
+		d.x_ind = xvals.index(d.loc.x)
+		d.y_ind = yvals.index(d.loc.y)
+
+	return dots
+
+def filterDots(dots, exclude_boundary = None, max_num_dots = None):
+	# If exclude_boundary is given as an int, then the outermost number of given rows and columns are removed
+	if exclude_boundary is not None:
+		min_x, max_x = min(d.x_ind for d in dots), max(d.x_ind for d in dots)
+		min_y, max_y = min(d.y_ind for d in dots), max(d.y_ind for d in dots)
+
+		# Boundary values (inclusive)
+		min_bx, max_bx = min_x + exclude_boundary, max_x - exclude_boundary
+		min_by, max_by = min_y + exclude_boundary, max_y - exclude_boundary
+
+		dots = [d for d in dots if d.x_ind >= min_bx and d.x_ind <= max_bx and d.y_ind >= min_by and d.y_ind <= max_by]
+
+	if max_num_dots is not None and len(dots) > max_num_dots:
+		dots = random.sample(dots, max_num_dots)
+
 	return dots
 
 def generateDots(gm, collected_dots, wall_plane, verbose = True):
@@ -463,6 +629,7 @@ def generateDots(gm, collected_dots, wall_plane, verbose = True):
 
 		this_dot = Dot(cdot.gmh, cdot.gmv, ip)
 		this_dot.corner_ind = cdot.corner_ind
+		this_dot.x_ind, this_dot.y_ind = cdot.x_ind, cdot.y_ind
 
 		dots.append(this_dot)
 
@@ -474,6 +641,46 @@ def generateDots(gm, collected_dots, wall_plane, verbose = True):
 	else:
 		return dots, is_dot_intersection_neg
 
+def getGridStats(dots):
+	dots_by_ind = {(dot.x_ind, dot.y_ind): dot for dot in dots}
+
+	xvecs = []
+	yvecs = []
+	for (x, y), dot in dots_by_ind.iteritems():
+		if (x + 1, y) in dots_by_ind:
+			xvecs.append(dots_by_ind[(x + 1, y)].loc - dot.loc)
+		if (x, y + 1) in dots_by_ind:
+			yvecs.append(dots_by_ind[(x, y + 1)].loc - dot.loc)
+
+	avg_xvec = sum(xvecs, Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(xvecs)))
+	avg_yvec = sum(yvecs, Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(yvecs)))
+	
+	print avg_xvec.dot(avg_yvec)
+
+	prev_mag = avg_yvec.mag()
+	avg_yvec = (avg_yvec - avg_xvec.mult(avg_xvec.dot(avg_yvec) / avg_xvec.mag() / avg_yvec.mag())).norm().mult(prev_mag)
+
+	x_errs = [xv.dist(avg_xvec) for xv in xvecs]
+	y_errs = [yv.dist(avg_yvec) for yv in yvecs]
+
+	return avg_xvec, avg_yvec, x_errs, y_errs
+
+def calculateGridError(collected_dots, gen_dots, verbose = False):
+	gx, gy, gx_errs, gy_errs = getGridStats(gen_dots)
+
+	if verbose:
+		# cx, cy, cx_errs, cy_errs = getGridStats(collected_dots)
+		print 'Angle between axes:', gx.angle(gy) * 180.0 / math.pi
+		print 'Avg x error:       ', sum(gx_errs) / float(len(gx_errs))
+		print 'Max x error:       ', max(gx_errs)
+		print 'Avg y error:       ', sum(gy_errs) / float(len(gy_errs))
+		print 'Max y error:       ', max(gy_errs)
+
+		# print 'Dif x mag:         ', gx.mag() - cx.mag()
+		# print 'Dif y mag:         ', gy.mag() - cy.mag()
+
+	return gx_errs + gy_errs
+
 # Find GM Param functions
 
 # Finds the orientation and position of a given GM that minimizes the error between observed and calculated dots.
@@ -481,6 +688,7 @@ def makeRotAndTransFunction(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec
 							R_static = None, T_static = None, modify_init_dir = True, modify_init_point = True,
 							modify_m1_norm = True, modify_m1_point = True, modify_m1_axis = True,
 							modify_m2_norm = True, modify_m2_point = True, modify_m2_axis = True,
+							modify_linear_val_params = False, modify_quadratic_val_params = False,
 							error_type = 'distance'):
 	if error_type not in ['distance', 'difference']:
 		raise Exception('Invalid error_type')
@@ -489,10 +697,10 @@ def makeRotAndTransFunction(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec
 		# Get values from solver
 		x = 0
 		if R_static == None:
-			r_theta, r_alpha, r_beta = vs[x : x+3]
+			r_a1, r_a2, r_a3 = vs[x : x+3]
 			x += 3
 
-			R = quatFromAngle(r_theta, r_alpha, r_beta).toRotMatrix()
+			R = rotMatrixFromAngles(r_a1, r_a2, r_a3)
 		else:
 			R = R_static
 
@@ -554,6 +762,18 @@ def makeRotAndTransFunction(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec
 
 			this_gm.a2 = vecFromAngle(a2_a, a2_b)
 
+		if modify_linear_val_params:
+			vp = vs[x : x+1]
+			x += 1
+
+			this_gm.val_params = (vp,)
+
+		if modify_quadratic_val_params:
+			vp_a, vp_b = vs[x : x+2]
+			x += 2
+
+			this_gm.val_params = (vp_a, vp_b)
+
 		# Move the GM based on the input from the solver
 		rt_gm = this_gm.move(R, T)
 
@@ -561,15 +781,16 @@ def makeRotAndTransFunction(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec
 		no_intersection = any(not rt_gm.getOutput(dot.gmh, dot.gmv, check_intersection = True) for dot in dots)
 
 		rv = []
+		inf_val = pow(10.0, 20.0)
 		for dot in dots:
 			p, d = rt_gm.getOutput(dot.gmh, dot.gmv)
 			intersection_point, neg = wall_plane.intersect(p, d)
 
 			if no_intersection is True or neg is None or neg is True:
 				if error_type == 'difference':
-					rv += [float('inf'), float('inf'), float('inf')]
+					rv += [inf_val, inf_val, inf_val]
 				elif error_type == 'distance':
-					rv.append(float('inf'))
+					rv.append(inf_val)
 			else:
 				if error_type == 'difference':
 					rv += [intersection_point.x - dot.loc.x, intersection_point.y - dot.loc.y, intersection_point.z - dot.loc.z]
@@ -583,11 +804,14 @@ def makeRotAndTransFunction(gm, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec
 def findRotAndTransParams(gm, R, T, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0)),
 							modify_R = True, modify_T = True, modify_init_dir = True, modify_init_point = True,
 							modify_m1_norm = True, modify_m1_point = True, modify_m1_axis = True,
-							modify_m2_norm = True, modify_m2_point = True, modify_m2_axis = True):
+							modify_m2_norm = True, modify_m2_point = True, modify_m2_axis = True,
+							modify_linear_val_params = False, modify_quadratic_val_params = False,
+							low_error_size = None):
 	if all(not v for v in [modify_R, modify_T, modify_init_dir, modify_init_point,
 			modify_m1_norm, modify_m1_point, modify_m1_axis,
-			modify_m2_norm, modify_m2_point, modify_m2_axis]):
-		return R, T, gm.init_dir, gm.init_point, gm.m1.norm, gm.m1.point, gm.a1, gm.m2.norm, gm.m2.point, gm.a2
+			modify_m2_norm, modify_m2_point, modify_m2_axis,
+			modify_linear_val_params, modify_quadratic_val_params]):
+		return dots, R, T, gm.init_dir, gm.init_point, gm.m1.norm, gm.m1.point, gm.a1, gm.m2.norm, gm.m2.point, gm.a2, gm.val_params
 
 	R_static = None
 	if not modify_R:
@@ -602,46 +826,101 @@ def findRotAndTransParams(gm, R, T, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0),
 								modify_init_dir = modify_init_dir, modify_init_point = modify_init_point,
 								modify_m1_norm = modify_m1_norm, modify_m1_point = modify_m1_point, modify_m1_axis = modify_m1_axis,
 								modify_m2_norm = modify_m2_norm, modify_m2_point = modify_m2_point, modify_m2_axis = modify_m2_axis,
+								modify_linear_val_params = modify_linear_val_params, modify_quadratic_val_params = modify_quadratic_val_params,
 								error_type = 'distance')
 
+	solving_for = []
+
 	init_guess = []
+	bound_vals = []
 	if modify_R:
 		init_guess += list(R.getAngles())
+		bound_vals += [5.0 * math.pi / 180.0] * 3
+
+		solving_for.append('Rotation matrix')
 
 	if modify_T:
 		init_guess += [T.x, T.y, T.z]
+		bound_vals += [20.0] * 3
+
+		solving_for.append('Translation vector')
 
 	if modify_init_dir:
 		init_guess += list(gm.init_dir.getAngles())
+		bound_vals += [10.0 * math.pi / 180.0] * 2
+
+		solving_for.append('Initial direction')
+
 	if modify_init_point:
 		init_guess += [gm.init_point.x, gm.init_point.y, gm.init_point.z]
+		bound_vals += [50.0] * 3
+
+		solving_for.append('Initial point')
 
 	if modify_m1_norm:
 		init_guess += list(gm.m1.norm.getAngles())
+		bound_vals += [5.0 * math.pi / 180.0] * 2
+
+		solving_for.append('M1 normal')
+
 	if modify_m1_point:
 		init_guess += [gm.m1.point.x, gm.m1.point.y, gm.m1.point.z]
+		bound_vals += [10.0] * 3
+
+		solving_for.append('M1 point')
+
 	if modify_m1_axis:
 		init_guess += list(gm.a1.getAngles())
+		bound_vals += [5.0 * math.pi / 180.0] * 2
+
+		solving_for.append('M1 axis')
 
 	if modify_m2_norm:
 		init_guess += list(gm.m2.norm.getAngles())
+		bound_vals += [5.0 * math.pi / 180.0] * 2
+
+		solving_for.append('M2 normal')
+
 	if modify_m2_point:
 		init_guess += [gm.m2.point.x, gm.m2.point.y, gm.m2.point.z]
+		bound_vals += [10.0] * 3
+
+		solving_for.append('M2 point')
+
 	if modify_m2_axis:
 		init_guess += list(gm.a2.getAngles())
+		bound_vals += [5.0 * math.pi / 180.0] * 2
 
-	rv = least_squares(f, tuple(init_guess))
+		solving_for.append('M2 axis')
+
+	if modify_linear_val_params:
+		init_guess += list(gm.val_params)
+		bound_vals += [0.1]
+
+		solving_for.append('Linear Val Params')
+
+	if modify_quadratic_val_params:
+		init_guess += list(gm.val_params)
+		bound_vals += [0.1] * 2
+
+		solving_for.append('Quadratic Val Params')
+
+	print '\nSolving For:\n' + ', '.join(solving_for) + '\n'
+
+	min_bounds = [v - b for v, b in zip(init_guess, bound_vals)]
+	max_bounds = [v + b for v, b in zip(init_guess, bound_vals)]
+
+	print 'Stopping constraints:', all_data_stopping_constraints
+	rv = least_squares(f, tuple(init_guess), **all_data_stopping_constraints)
 
 	cost = rv.cost
 
 	x = 0
 	if R_static == None:
-		r_theta, r_alpha, r_beta = rv.x[x : x+3]
+		r_a1, r_a2, r_a3 = rv.x[x : x+3]
 		x += 3
 
-		print 'Rotation matrix angles:', r_theta, r_alpha, r_beta
-
-		R = quatFromAngle(r_theta, r_alpha, r_beta).toRotMatrix()
+		R = rotMatrixFromAngles(r_a1, r_a2, r_a3)
 	else:
 		R = R_static
 
@@ -657,7 +936,6 @@ def findRotAndTransParams(gm, R, T, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0),
 		id_a, id_b = rv.x[x : x+2]
 		x += 2
 
-		print 'Init dir angles:', id_a, id_b
 		init_dir = vecFromAngle(id_a, id_b)
 	else:
 		init_dir = gm.init_dir
@@ -718,7 +996,50 @@ def findRotAndTransParams(gm, R, T, dots, wall_plane = Plane(Vec(0.0, 0.0, 1.0),
 	else:
 		m2_axis = gm.a2
 
-	return R, T, init_dir, init_point, m1_norm, m1_point, m1_axis, m2_norm, m2_point, m2_axis
+	if modify_linear_val_params:
+		vp = rv.x[x : x+1]
+		x += 1
+
+		val_params = (vp,)
+	elif modify_quadratic_val_params:
+		vp_a, vp_b = rv.x[x : x+2]
+		x += 2
+
+		val_params = (vp_a, vp_b)
+	else:
+		val_params = gm.val_params
+
+	if low_error_size is not None:
+		if low_error_size < 0:
+			low_error_size = len(dots) + low_error_size
+
+		if low_error_size <= 0 or low_error_size >= len(dots):
+			raise Exception('Invalid value fo low_error_size; must be between 1 and ' + str(len(dots) - 1))
+
+		dot_errs = [(e, d) for e, d in zip(f(rv.x), dots)]
+		dot_errs.sort()
+
+		err_of_dots  = [e for e, _ in dot_errs[:low_error_size]]
+		low_err_dots = [d for _, d in dot_errs[:low_error_size]]
+
+		print '\nRunning regression with only low error points:'
+		print 'Max error of low error points in full regression:', max(err_of_dots)
+		print 'Avg error of low error points in full regression:', sum(err_of_dots) / float(len(err_of_dots))
+		print ''
+
+		this_gm = GM(init_dir, init_point, Plane(m1_norm, m1_point), m1_axis, Plane(m2_norm, m2_point), m2_axis)
+
+		_, R, T, init_dir, init_point, m1_norm, m1_point, m1_axis, m2_norm, m2_point, m2_axis, val_params = \
+				findRotAndTransParams(this_gm, R, T, low_err_dots, wall_plane = wall_plane,
+					modify_R = modify_R, modify_T = modify_T, modify_init_dir = modify_init_dir, modify_init_point = modify_init_point,
+					modify_m1_norm = modify_m1_norm, modify_m1_point = modify_m1_point, modify_m1_axis = modify_m1_axis,
+					modify_m2_norm = modify_m2_norm, modify_m2_point = modify_m2_point, modify_m2_axis = modify_m2_axis,
+					modify_linear_val_params = modify_linear_val_params, modify_quadratic_val_params = modify_quadratic_val_params,
+					low_error_size = None)
+
+		return low_err_dots, R, T, init_dir, init_point, m1_norm, m1_point, m1_axis, m2_norm, m2_point, m2_axis, val_params
+
+	return dots, R, T, init_dir, init_point, m1_norm, m1_point, m1_axis, m2_norm, m2_point, m2_axis, val_params
 
 def calculateError(collected_dots, gen_dots):
 	cdots = dict()
@@ -749,24 +1070,127 @@ def calculateError(collected_dots, gen_dots):
 
 		errors.append(this_error)
 
-	print 'Average Error:', sum(errors) / float(len(errors))
-	print 'Max Error:    ', max(errors)
+	drawHistogram(errors, n_bins = 10000, title = 'Error in GM Model')
+
+	print 'Average Error:', sum(errors) / float(len(errors)), 'mm'
+	print 'Max Error:    ', max(errors), 'mm'
+
+def differenceBetweenGM(gm1, gm2):
+	print 'Angle between initial beam:', gm1.init_dir.angle(gm2.init_dir)
+	print 'Distance between initial beam starts:', min(distanceToLine(gm1.init_point, gm1.init_dir, gm2.init_point), distanceToLine(gm2.init_point, gm2.init_dir, gm1.init_point))
+	print 'Angle between m1:', gm1.m1.norm.angle(gm2.m1.norm)
+	print 'Angle between a1:', gm1.a1.angle(gm2.a1)
+	print 'Distance between m1.point:', min(distanceToLine(gm1.m1.point, gm1.a1, gm2.m1.point), distanceToLine(gm2.m1.point, gm2.a1, gm1.m1.point))
+	print 'Angle between m2:', gm1.m2.norm.angle(gm2.m2.norm)
+	print 'Angle between a2:', gm1.a2.angle(gm2.a2)
+	print 'Distance between m2.point:', min(distanceToLine(gm1.m2.point, gm1.a2, gm2.m2.point), distanceToLine(gm2.m2.point, gm2.a2, gm1.m2.point))
+
+def rangeOfLaunchPoint(gm):
+	pc, _ = gm.getOutput(pow(2, 15), pow(2, 15))
+
+	p_nh, _ = gm.getOutput(0, pow(2, 15))
+	p_ph, _ = gm.getOutput(pow(2, 16), pow(2, 15))
+
+	p_nv, _ = gm.getOutput(pow(2, 15), 0)
+	p_pv, _ = gm.getOutput(pow(2, 15), pow(2, 16))
+
+	p_nh_nv, _ = gm.getOutput(0, 0)
+	p_nh_pv, _ = gm.getOutput(0, pow(2, 16))
+	p_ph_nv, _ = gm.getOutput(pow(2, 16), 0)
+	p_ph_pv, _ = gm.getOutput(pow(2, 16), pow(2, 16))
+
+	cross_dists = map(lambda p: p.dist(pc), [p_nh, p_ph, p_nv, p_pv])
+	corner_dists = map(lambda p: p.dist(pc), [p_nh_nv, p_nh_pv, p_ph_nv, p_ph_pv])
+
+	print 'Max distance between center launch point and extremes:', max(cross_dists + corner_dists)
+
+# Drawing histograms
+def drawHistogram(errs, n_bins = 100, title = '', x_label = 'Error (mm)', y_label = 'CDF'):
+	fig, ax = plt.subplots()
+
+	n, bins, patches = ax.hist(errs, n_bins,
+								normed = True, histtype = 'step',
+								cumulative = True)
+
+	ax.set_title(title)
+	ax.set_xlabel(x_label)
+	ax.set_ylabel(y_label)
+
+	plt.show()
+
+def getTXInitData():
+	global angle_algo
+	angle_algo = 'ypr'
+
+	print '\nSolving for TX GM\n'
+	collected_dots = getDotsFromFile('data/12-2/tx_board_data_12-2.txt')
+	
+	# init_dir = vecFromAngle(0.0, 0.0)
+	# init_point = Vec(5.0005588143, 29.865539516, -43.3404917057)
+
+	# init_gm = getGMFromCAD(init_dir, init_point)
+	# init_gm.mirror_thickness = 0.0
+
+	# outputGM(init_gm, 'data/12-2/gm_init_12-2.txt')
+
+	init_R = rotMatrixFromAngles(0.0, 0.0, 0.0)
+	init_T = Vec(0.0, 0.0, 0.0)
+	# init_T = Vec(503.85, -54.61, 1492.74)
+
+	init_gm = getGMFromFile('data/12-2/tx_gm_board_12-2.txt')
+
+
+	local_fname = None # 'data/12-2/tx_gm_local_12-2.txt'
+	abs_fname   = None # 'data/12-2/tx_gm_board_12-2.txt'
+
+	return init_gm, init_R, init_T, collected_dots, local_fname, abs_fname
+
+def getRXInitData():
+	global angle_algo
+	angle_algo = 'ypr'
+
+	print '\nSolving for RX GM\n'
+	collected_dots = getDotsFromFile('data/12-2/rx_board_data_12-2.txt')
+
+	y_filter = 53.08 * 5 + 0.1
+
+	if y_filter is None:
+		new_collected_dots = []
+		for dot in collected_dots:
+			if dot.loc.y <= y_filter:
+				new_collected_dots.append(dot)
+
+		collected_dots = new_collected_dots
+
+	# init_dir = vecFromAngle(0.0, 0.0)
+	# init_point = Vec(5.0005588143, 29.865539516, -43.3404917057)
+
+	# init_gm = getGMFromCAD(init_dir, init_point)
+
+	init_gm = getGMFromFile('data/12-5/rx_gm_board_12-5.txt')
+
+	init_R = rotMatrixFromAngles(0.0, 0.0, 0.0)
+	init_T = Vec(0.0, 0.0, 0.0)
+	# init_T = Vec(403.85, -15.61, 1202.74)
+	# init_T = Vec(401.594856542, 0.955179254573, 1208.9688021)
+	
+	local_fname = None # 'data/12-5/rx_gm_local_12-5.txt'
+	abs_fname   = None # 'data/12-5/rx_gm_board_12-5.txt'
+
+	return init_gm, init_R, init_T, collected_dots, local_fname, abs_fname
 
 if __name__ == '__main__':
-	collected_dots = getDotsFromFile('data/2-14/data_2-14.txt')
+	init_gm, init_R, init_T, collected_dots, local_fname, gm_fname = getTXInitData()
+	# init_gm, init_R, init_T, collected_dots, local_fname, gm_fname = getRXInitData()
 
-	# Initialize GM
-	init_gm = getGMFromCAD(vecFromAngle(-0.437406371192, 1.56966805448), Vec(-2.98952866863, 0.500058946231, -4.3355745444))
-
-	init_R = quatFromAngle(0.010526284225, -0.728423588802, 0.279838973767).toRotMatrix()
-	init_T = Vec(378.122802504, -128.186853293, 858.533878011)
-
-	R, T, init_dir, init_point, m1_norm, m1_point, m1_axis, m2_norm, m2_point, m2_axis = \
+	dots_used, R, T, init_dir, init_point, m1_norm, m1_point, m1_axis, m2_norm, m2_point, m2_axis, val_params = \
 			findRotAndTransParams(init_gm, init_R, init_T, collected_dots,
-									modify_R = True, modify_T = True,
-									modify_init_dir = True, modify_init_point = True,
-									modify_m1_norm = True, modify_m1_point = True, modify_m1_axis = True,
-									modify_m2_norm = True, modify_m2_point = True, modify_m2_axis = True)
+									modify_R = False, modify_T = False,
+									modify_init_dir = False, modify_init_point = False,
+									modify_m1_norm = False, modify_m1_point = False, modify_m1_axis = False,
+									modify_m2_norm = False, modify_m2_point = False, modify_m2_axis = False,
+									modify_linear_val_params = False, modify_quadratic_val_params = False,
+									low_error_size = None)
 
 	print 'Rotation Matrix:'
 	print R
@@ -785,18 +1209,26 @@ if __name__ == '__main__':
 	print 'M2 point:          ', m2_point
 	print 'M2 axis:           ', m2_axis
 	print 'M2 axis angles:    ', m2_axis.getAngles()
+	print 'Convert val params:', val_params
+	print ''
 
 	# Find rotation and translation that best matches data
-	opt_gm = GM(init_dir, init_point, Plane(m1_norm, m1_point), m1_axis, Plane(m2_norm, m2_point), m2_axis)
-	opt_gm = opt_gm.move(R, T)
+	opt_gm = GM(init_dir, init_point, Plane(m1_norm, m1_point), m1_axis, Plane(m2_norm, m2_point), m2_axis, mirror_thickness = init_gm.mirror_thickness, val_params = val_params)
 
-	outputGM(opt_gm, 'gm_2-19.txt')
+	if local_fname is not None:
+		outputGM(opt_gm, local_fname)
+
+	opt_gm = opt_gm.move(R, T)
+	if gm_fname is not None:
+		outputGM(opt_gm, gm_fname)
 
 	# Generate dots
-	gen_dots = generateDots(opt_gm, collected_dots, Plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0)))
+	gen_dots = generateDots(opt_gm, dots_used, Plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0)))
 
 	# Calculate the error between the dots
-	calculateError(collected_dots, gen_dots)
+	calculateError(dots_used, gen_dots)
 
 	# Draw collected dots and the generated dots
-	drawDots(collected_dots, gen_dots)
+	# drawDots(dots_used, gen_dots)
+
+	rangeOfLaunchPoint(opt_gm)

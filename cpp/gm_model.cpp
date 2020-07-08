@@ -85,18 +85,6 @@ GMModel GMModel::move(const Matrix& rot_mtx, const Vec& tvec) const {
 					SimpPlane(rot_mtx.mult(mirror2.normal), rot_mtx.mult(mirror2.point) + tvec), rot_mtx.mult(rot_axis2));
 }
 
-GMModel GMModel::moveWithNewInitBeam(const Matrix& rot_mtx, const Vec& tvec, const Vec& new_init_dir, const Vec& new_init_point) const {
-	// std::cout << "------------" << std::endl;
-	// std::cout << rot_mtx << std::endl;
-	// std::cout << this->init_point << std::endl;
-	// std::cout << new_init_point << " " << tvec << std::endl;
-	// std::cout << rot_mtx.mult(new_init_point) + tvec << std::endl;
-
-	return GMModel(rot_mtx.mult(new_init_dir), rot_mtx.mult(new_init_point) + tvec,
-					SimpPlane(rot_mtx.mult(mirror1.normal), rot_mtx.mult(mirror1.point) + tvec), rot_mtx.mult(rot_axis1),
-					SimpPlane(rot_mtx.mult(mirror2.normal), rot_mtx.mult(mirror2.point) + tvec), rot_mtx.mult(rot_axis2));
-}
-
 double gmValToRadian(double gm_val) {
 	return -1.0 * (40.0 / pow(2.0, 16.0) * gm_val - 20.0) * M_PI / 180.0;
 }
@@ -141,9 +129,9 @@ GMModel getGMModelFromFile(const std::string& fname) {
 }
 
 std::ostream& operator<<(std::ostream& ostr, const GMModel& gm_model) {
-	ostr << "init_dir " << gm_model.init_dir << std::endl << "init_point " << gm_model.init_point << std::endl;
-	ostr << "m1_norm " << gm_model.mirror1.normal << std::endl << "m1_point " << gm_model.mirror1.point << std::endl << "m1_axis " << gm_model.rot_axis1 << std::endl;
-	ostr << "m2_norm " << gm_model.mirror2.normal << std::endl << "m2_point " << gm_model.mirror2.point << std::endl << "m2_axis " << gm_model.rot_axis2;
+	ostr << gm_model.init_dir << std::endl << gm_model.init_point << std::endl;
+	ostr << gm_model.mirror1 << std::endl << gm_model.rot_axis1 << std::endl;
+	ostr << gm_model.mirror2 << std::endl << gm_model.rot_axis2 << std::endl;
 
 	return ostr;
 }

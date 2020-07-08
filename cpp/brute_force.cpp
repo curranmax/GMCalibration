@@ -3,6 +3,7 @@
 
 #include <curses.h>
 
+#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -11,6 +12,7 @@
 #include <list>
 #include <math.h>
 #include <sstream>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -866,4 +868,145 @@ void runBruteForceSearchMultThreaded(const std::vector<Dot>& dots, const GMModel
 
 	std::string out_fname(buf);
 	writeResultsToFile(out_fname, params, gm_model, rot_mtx, tvec, results, starting_indexes, ending_indexes, digit_vals);
+}
+
+std::pair<TestCase, ErrorStats> runSingleSimpleMinimization(const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer, bool randomize) {
+	std::vector<double> rot_values   = getValues(params.rot_range,   params.rot_step,   false, "Rot values");
+	std::vector<double> trans_values = getValues(params.trans_range, params.trans_step, false, "Trans values");
+	std::vector<double> idir_values  = getValues(params.idir_range,  params.idir_step,  false, "Input dir values");
+	std::vector<double> iloc_values  = getValues(params.iloc_range,  params.iloc_step,  false, "Input loc values");
+
+	std::vector<int> lens = {int(rot_values.size()), int(rot_values.size()), int(rot_values.size()),
+							 int(trans_values.size()), int(trans_values.size()), int(trans_values.size()),
+							 int(idir_values.size()), int(idir_values.size()),
+							 int(iloc_values.size()), int(iloc_values.size())};
+
+	std::vector<int> order(lens.size());
+	std::vector<int> indexes(lens.size());
+	for(unsigned int i = 0; i < lens.size(); ++i) {
+		order[i] = i;
+
+		if(randomize) {
+			indexes[i] = rand() % lens[i];
+		} else {
+			indexes[i] = int(lens[i] / 2);
+		}
+	}
+
+	if(randomize) {
+		std::random_shuffle(order.begin(), order.end());
+	}
+
+	SimpPlane wall_plane(Vec(0.0, 0.0, 1.0), Vec(0.0, 0.0, 0.0));
+	int cur_ind = 0;
+	int same_streak = 0;
+
+	bool first_outer = true;
+	ErrorStats best_stats_outer;
+
+	// int n_iters = 1;
+
+	while(true) {
+		timer.start("sm_iteration");
+
+		int start_val = indexes[order[cur_ind]];
+
+		bool first_inner = true;
+		ErrorStats best_stats_inner;
+		int best_val_inner = -1;
+
+		// Find k  such that indexes[k] minimizes least square error;
+		for(indexes[order[cur_ind]] = 0; indexes[order[cur_ind]] < lens[order[cur_ind]]; ++indexes[order[cur_ind]]) {
+			double yaw_delta = rot_values[indexes[0]], pitch_delta = rot_values[indexes[1]], roll_delta = rot_values[indexes[2]];
+			double tx_delta = trans_values[indexes[3]], ty_delta = trans_values[indexes[4]], tz_delta = trans_values[indexes[5]];
+			double ida_delta = idir_values[indexes[6]], idb_delta = idir_values[indexes[7]];
+			double ily_delta = iloc_values[indexes[8]], ilz_delta = iloc_values[indexes[9]];
+
+			TestCase this_vals(yaw_delta, pitch_delta, roll_delta, tx_delta, ty_delta, tz_delta, ida_delta, idb_delta, ily_delta, ilz_delta);
+
+			std::vector<double> errors = this_vals.getErrors(rot_mtx, tvec, gm_model, dots, wall_plane);
+
+			ErrorStats this_stats = analyzeErrors(errors);
+
+			if(first_inner || this_stats.average < best_stats_inner.average) {
+				first_inner = false;
+				best_stats_inner = this_stats;
+				best_val_inner = indexes[order[cur_ind]];
+			}
+		}
+
+		if(first_outer) {
+			first_outer = false;
+			best_stats_outer = best_stats_inner;
+		} else if(best_stats_inner.average <= best_stats_outer.average) {
+			best_stats_outer = best_stats_inner;
+		} else {
+			std::cout << "Unexpected error stats: " << best_stats_outer.average << ", " << best_stats_inner.average << std::endl;
+			exit(1);
+		}
+
+		// std::cout << "Itreation " << n_iters << ": " << best_stats_inner.average << std::endl;
+		// n_iters++;
+
+		indexes[order[cur_ind]] = best_val_inner;
+
+		if(start_val == indexes[order[cur_ind]]) {
+			same_streak++;
+		} else {
+			same_streak = 0;
+		}
+
+		if(same_streak >= int(lens.size())) {
+			timer.end("sm_iteration");
+			break;
+		}
+
+		++cur_ind;
+		if(cur_ind >= int(indexes.size())) {
+			cur_ind = 0;
+		}
+		timer.end("sm_iteration");
+	}
+
+	double yaw_delta = rot_values[indexes[0]], pitch_delta = rot_values[indexes[1]], roll_delta = rot_values[indexes[2]];
+	double tx_delta = trans_values[indexes[3]], ty_delta = trans_values[indexes[4]], tz_delta = trans_values[indexes[5]];
+	double ida_delta = idir_values[indexes[6]], idb_delta = idir_values[indexes[7]];
+	double ily_delta = iloc_values[indexes[8]], ilz_delta = iloc_values[indexes[9]];
+
+	TestCase best_vals(yaw_delta, pitch_delta, roll_delta, tx_delta, ty_delta, tz_delta, ida_delta, idb_delta, ily_delta, ilz_delta);
+
+	
+
+	return std::make_pair(best_vals, best_stats_outer);
+}
+
+void runSimpleMinimization(int num_tests, const std::vector<Dot>& dots, const GMModel& gm_model, const Matrix& rot_mtx, const Vec& tvec, const BruteForceParams& params, Timer& timer) {
+	TestCase best_vals;
+	ErrorStats best_stats;
+
+	for(int i = 0; i < num_tests; ++i) {
+		std::cout << "-------------------------------------------------------" << std::endl;
+		std::cout << "Running test " << i + 1 << " of " << num_tests << std::endl << std::endl;
+
+		auto this_result = runSingleSimpleMinimization(dots, gm_model, rot_mtx, tvec, params, timer, num_tests > 1);
+
+		std::cout << this_result.first << std::endl;
+		std::cout << "Average error: " << this_result.second.average << std::endl;
+		std::cout << "Maximum error: " << this_result.second.maximum << std::endl;
+		std::cout << "Lst sqs error: " << this_result.second.least_squares << std::endl;
+
+		if(i == 0 || this_result.second.average < best_stats.average) {
+			best_vals  = this_result.first;
+			best_stats = this_result.second;
+		}
+	}
+
+	std::cout << "-------------------------------------------------------" << std::endl;
+	std::cout << "-------------------------------------------------------" << std::endl;
+	std::cout << "All tests have finished" << std::endl << std::endl;
+
+	std::cout << best_vals << std::endl;
+	std::cout << "Average error: " << best_stats.average << " mm" << std::endl;
+	std::cout << "Maximum error: " << best_stats.maximum << " mm" << std::endl;
+	std::cout << "Lst sqs error: " << best_stats.least_squares << " mm" << std::endl;
 }
