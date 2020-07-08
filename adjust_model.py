@@ -6,6 +6,26 @@ from scipy.optimize import least_squares
 
 from copy import deepcopy
 
+# ======================================================================
+# ======================================================================
+# Starting Models. Once you get somethingn that works, you can use those results here
+TX_MODEL_FNAME = 'data/3-4/tx_gm_vr_3-4.txt'
+RX_MODEL_FNAME = 'data/3-4/rx_gm_vr_3-4.txt'
+
+FIX_TX_POSITION = False
+INIT_TX_POSITIONO = Vec(0.40069934, 0.98062328, 0.36487804)
+
+# The two data files
+VR_DATA_FNAME    = 'data/3-6/vr_data_3-6.txt'
+ALIGN_DATA_FNAME = 'data/3-6/align_data_3-6.txt'
+
+# THe output files
+NEW_TX_MODEL_FNAME = 'data/3-6/tx_gm_vr_3-6.txt'
+NEW_RX_MODEL_FNAME = 'data/3-6/rx_gm_vr_3-6.txt'
+
+# ======================================================================
+# ======================================================================
+
 class VoltDataPoint:
 	def __init__(self, tx_gm1, tx_gm2, rx_gm1, rx_gm2, dist = None):
 		self.tx_gm1 = tx_gm1
@@ -278,17 +298,11 @@ def findConversionBetweenVRSpaces():
 	# print sum([con_pos.dist(new_dp.tvec) for con_pos, (new_dp, _) in zip(converted_vr_pos, new_avg_data)]) / float(len(converted_vr_pos)) * 1000.0, 'mm'
 
 if __name__ == '__main__':
-	# findConversionBetweenVRSpaces()
-	# exit()
+	tx_gm_model_fname = TX_MODEL_FNAME
+	rx_gm_model_fname = RX_MODEL_FNAME
 
-	# tx_gm_model_fname = 'data/4-25/gm_vr_4-25.txt'
-	# rx_gm_model_fname = 'data/6-26/gm_vr_rel_6-26.txt'
-
-	tx_gm_model_fname = 'data/3-4/tx_gm_vr_3-4.txt' # 'data/2-10/tx_gm_vr_2-10.txt' # 'data/12-4/tx_gm_vr_12-4.txt' # 'data/12-2/tx_gm_local_12-2.txt'
-	rx_gm_model_fname = 'data/3-4/rx_gm_vr_3-4.txt' # 'data/2-10/rx_gm_vr_2-10.txt' # 'data/12-5/rx_gm_local_12-5.txt' # 'data/12-5/rx_gm_local_12-5.txt'
-
-	vr_data_fnames   = ['data/3-6/vr_data_3-6.txt']
-	volt_data_fnames = ['data/3-6/align_data_3-6.txt']
+	vr_data_fnames   = [VR_DATA_FNAME]
+	volt_data_fnames = [ALIGN_DATA_FNAME]
 
 	num_vr_per_volt = 1000
 
@@ -297,8 +311,8 @@ if __name__ == '__main__':
 	use_dist = False
 	dist_err = 0.5
 
-	new_tx_gm_model_fname = 'data/3-6/tx_gm_vr_3-6.txt'
-	new_rx_gm_model_fname = 'data/3-6/rx_gm_vr_3-6.txt'
+	new_tx_gm_model_fname = NEW_TX_FNAME
+	new_rx_gm_model_fname = NEW_RX_FNAME
 
 	print 'TX Model:', tx_gm_model_fname
 	print 'RX Model:', rx_gm_model_fname
@@ -318,6 +332,10 @@ if __name__ == '__main__':
 	# Get GM Models
 	tx_gm_model = getGMFromFile(tx_gm_model_fname)
 	rx_gm_model = getGMFromFile(rx_gm_model_fname)
+
+  print tx_gm_model
+
+  quit()
 
 	# tx_gm_model.scale(1.0 / 1000.0)
 	# rx_gm_model.scale(1.0 / 1000.0)
@@ -356,9 +374,6 @@ if __name__ == '__main__':
 		volt_data = getVoltData(volt_data_fname)
 
 		full_data += processData(vr_data, volt_data, n = num_vr_per_volt, low_dist_thresh = low_dist_thresh)
-
-	# testStuff(tx_gm_model, rx_gm_model, full_data)
-	# quit()
 
 	# Adjust Models
 	new_tx_gm_model, new_rx_gm_model = adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = use_dist, dist_err = dist_err, adjust_tx_input_beam = False)
