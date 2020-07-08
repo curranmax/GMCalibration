@@ -53,7 +53,7 @@ def getVoltData(fname):
 			for cname in cols:
 				cols[cname] = spl.index(cname)
 		else:
-			tx1, tx2, rx1, rx2 = map(int, (spl[cols['TX1']], spl[cols['TX2']], spl[cols['RX1']], spl[cols['RX2']]))
+			tx1, tx2, rx1, rx2 = list(map(int, (spl[cols['TX1']], spl[cols['TX2']], spl[cols['RX1']], spl[cols['RX2']])))
 
 			if cols['Dist'] is None:
 				dist = None
@@ -69,14 +69,14 @@ def processData(vr_data, volt_data, n = 1, low_dist_thresh = 0.0):
 		raise Exception('Mismtaching data: VR --> ' + str(len(vr_data)) + ', Volt --> ' + str(len(volt_data)))
 
 	full_data = []
-	for i in xrange(0, len(vr_data), n):
+	for i in range(0, len(vr_data), n):
 		if volt_data[i / n].dist < low_dist_thresh:
 			continue
 
 		avg_tvec = Vec(0.0, 0.0, 0.0)
 		# avg_rot_mtx = Matrix(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 		all_quats = []
-		for x in xrange(i, i + n, 1):
+		for x in range(i, i + n, 1):
 			avg_tvec    = avg_tvec    + vr_data[x].tvec
 			# avg_rot_mtx = avg_rot_mtx + vr_data[x].rot_mtx
 			all_quats.append(vr_data[x].quat)
@@ -176,8 +176,8 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 					list(init_rx_rot_mtx.getAngles())
 
 	bound = 10.0
-	print 'Using bounds of:', bound * 1000.0, 'mm/mrad'
-	print ''
+	print('Using bounds of:', bound * 1000.0, 'mm/mrad')
+	print('')
 
 	min_bounds = [v - bound for v in init_guess]
 	max_bounds = [v + bound for v in init_guess]
@@ -189,21 +189,21 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 
 	init_tx_errs, init_rx_errs = func(init_guess, split = True)
 
-	print 'Init Avg TX error:', sum(init_tx_errs) / float(len(init_tx_errs)) * 1000.0, 'mm'
-	print 'Init Max TX error:', max(init_tx_errs) * 1000.0, 'mm'
-	print ''
-	print 'Init Avg RX error:', sum(init_rx_errs) / float(len(init_rx_errs)) * 1000.0, 'mm'
-	print 'Init Max RX error:', max(init_rx_errs) * 1000.0, 'mm'
-	print ''
-	print 'Init Avg all error:', sum(init_tx_errs + init_rx_errs) / float(len(init_tx_errs + init_rx_errs)) * 1000.0, 'mm'
-	print 'Init Max all error:', max(init_tx_errs + init_rx_errs) * 1000.0, 'mm'
-	print ''
+	print('Init Avg TX error:', sum(init_tx_errs) / float(len(init_tx_errs)) * 1000.0, 'mm')
+	print('Init Max TX error:', max(init_tx_errs) * 1000.0, 'mm')
+	print('')
+	print('Init Avg RX error:', sum(init_rx_errs) / float(len(init_rx_errs)) * 1000.0, 'mm')
+	print('Init Max RX error:', max(init_rx_errs) * 1000.0, 'mm')
+	print('')
+	print('Init Avg all error:', sum(init_tx_errs + init_rx_errs) / float(len(init_tx_errs + init_rx_errs)) * 1000.0, 'mm')
+	print('Init Max all error:', max(init_tx_errs + init_rx_errs) * 1000.0, 'mm')
+	print('')
 
 	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': 1e4}
 	
 	rv = least_squares(func, init_guess,  bounds = (min_bounds, max_bounds), **stopping_constraints)
 
-	print rv.x
+	print(rv.x)
 	vals = rv.x
 	
 	tx_tvec    = Vec(*vals[0:3])
@@ -221,31 +221,31 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 
 	final_tx_errs, final_rx_errs = func(final_input, split = True)
 
-	print 'TX tvec:', tx_tvec - init_tx_tvec
-	print 'TX rm angles:', '(' + ', '.join(map(str, vals[3:6]))  +')'
-	print 'TX rot mtx:'
-	print tx_rot_mtx
-	print ''
-	print 'RX tvec:', rx_tvec - init_rx_tvec
-	print 'RX rm angles:', '(' + ', '.join(map(str, vals[9:12]))  +')'
-	print 'RX rot mtx:'
-	print rx_rot_mtx
-	print ''
+	print('TX tvec:', tx_tvec - init_tx_tvec)
+	print('TX rm angles:', '(' + ', '.join(map(str, vals[3:6]))  +')')
+	print('TX rot mtx:')
+	print(tx_rot_mtx)
+	print('')
+	print('RX tvec:', rx_tvec - init_rx_tvec)
+	print('RX rm angles:', '(' + ', '.join(map(str, vals[9:12]))  +')')
+	print('RX rot mtx:')
+	print(rx_rot_mtx)
+	print('')
 
 	if adjust_tx_input_beam:
-		print 'Dif TX init point:', dif_init_point_y, dif_init_point_z
-		print 'Dif TX init dir:  ', dif_alpha, dif_beta
+		print('Dif TX init point:', dif_init_point_y, dif_init_point_z)
+		print('Dif TX init dir:  ', dif_alpha, dif_beta)
 
-	print 'Avg TX error:', sum(final_tx_errs) / float(len(final_tx_errs)) * 1000.0, 'mm'
-	print 'Max TX error:', max(final_tx_errs) * 1000.0, 'mm'
-	print ''
-	print 'Avg RX error:', sum(final_rx_errs) / float(len(final_rx_errs)) * 1000.0, 'mm'
-	print 'Max RX error:', max(final_rx_errs) * 1000.0, 'mm'
-	print ''
+	print('Avg TX error:', sum(final_tx_errs) / float(len(final_tx_errs)) * 1000.0, 'mm')
+	print('Max TX error:', max(final_tx_errs) * 1000.0, 'mm')
+	print('')
+	print('Avg RX error:', sum(final_rx_errs) / float(len(final_rx_errs)) * 1000.0, 'mm')
+	print('Max RX error:', max(final_rx_errs) * 1000.0, 'mm')
+	print('')
 
-	print 'Avg total error:', sum(final_tx_errs + final_rx_errs) / float(len(final_tx_errs + final_rx_errs)) * 1000.0, 'mm'
-	print 'Max total error:', max(final_tx_errs + final_rx_errs) * 1000.0, 'mm'
-	print ''
+	print('Avg total error:', sum(final_tx_errs + final_rx_errs) / float(len(final_tx_errs + final_rx_errs)) * 1000.0, 'mm')
+	print('Max total error:', max(final_tx_errs + final_rx_errs) * 1000.0, 'mm')
+	print('')
 
 	if adjust_tx_input_beam:
 		local_tx_gm_model.init_point.y += dif_init_point_y
@@ -258,18 +258,18 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 
 def testStuff(tx_gm_model, rx_gm_model, full_data):
 	p, d = tx_gm_model.getOutput(pow(2, 15), pow(2, 15))
-	print 'TX:', p, d
-	print 'Second Vec should be approx:', Vec(0.0, 0.0, 1.0)
+	print('TX:', p, d)
+	print('Second Vec should be approx:', Vec(0.0, 0.0, 1.0))
 
 	def_vr_p = full_data[1][0]
 
-	print def_vr_p.rot_mtx
+	print(def_vr_p.rot_mtx)
 
 	def_rx_gm_model = rx_gm_model.move(def_vr_p.rot_mtx, def_vr_p.tvec)
 
 	p, d = def_rx_gm_model.getOutput(pow(2, 15), pow(2, 15))
-	print 'RX:', p, d
-	print 'Second Vec should be approx:', Vec(0.0, 0.0, -1.0)
+	print('RX:', p, d)
+	print('Second Vec should be approx:', Vec(0.0, 0.0, -1.0))
 
 def findConversionBetweenVRSpaces():
 	old_vr_data = getVRData('data/8-8/vr_data_8-8.txt')
@@ -291,7 +291,7 @@ def findConversionBetweenVRSpaces():
 
 	tx_gm_model = getGMFromFile('data/4-25/gm_vr_4-25.txt')
 
-	print tx_gm_model.init_point + avg_vec
+	print(tx_gm_model.init_point + avg_vec)
 
 	converted_vr_pos = [rot_mtx.mult(old_dp.tvec) + avg_vec for old_dp, _ in old_avg_data]
 
@@ -314,20 +314,20 @@ if __name__ == '__main__':
 	new_tx_gm_model_fname = NEW_TX_FNAME
 	new_rx_gm_model_fname = NEW_RX_FNAME
 
-	print 'TX Model:', tx_gm_model_fname
-	print 'RX Model:', rx_gm_model_fname
-	print ''
-	print 'VR Data:  ', vr_data_fnames
-	print 'Volt Data:', volt_data_fnames
-	print ''
-	print 'VR per Volt:', num_vr_per_volt
-	print 'LD Thresh:  ', low_dist_thresh, 'm'
-	print 'Use dist:   ', use_dist
-	print 'Dist err:   ', dist_err * 1000.0, 'mm'
-	print ''
-	print 'New TX Model:', new_tx_gm_model_fname
-	print 'New RX Model:', new_rx_gm_model_fname
-	print ''
+	print('TX Model:', tx_gm_model_fname)
+	print('RX Model:', rx_gm_model_fname)
+	print('')
+	print('VR Data:  ', vr_data_fnames)
+	print('Volt Data:', volt_data_fnames)
+	print('')
+	print('VR per Volt:', num_vr_per_volt)
+	print('LD Thresh:  ', low_dist_thresh, 'm')
+	print('Use dist:   ', use_dist)
+	print('Dist err:   ', dist_err * 1000.0, 'mm')
+	print('')
+	print('New TX Model:', new_tx_gm_model_fname)
+	print('New RX Model:', new_rx_gm_model_fname)
+	print('')
 
 	# Get GM Models
 	tx_gm_model = getGMFromFile(tx_gm_model_fname)

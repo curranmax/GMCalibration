@@ -94,7 +94,7 @@ class LinearPieceWise:
 		raise Exception('Invalid value outside of bounds: ' + str(x))
 
 	def outputString(self):
-		return 'LinearPieceWise ' + str(len(self.all_vals)) + ' ' + ' '.join(map(lambda x: ' '.join(map(str, x)), self.all_vals))
+		return 'LinearPieceWise ' + str(len(self.all_vals)) + ' ' + ' '.join([' '.join(map(str, x)) for x in self.all_vals])
 
 class CubicSpline:
 	def __init__(self, xvs, yvs):
@@ -114,7 +114,7 @@ class CubicSpline:
 		raise Exception('"x" is out of range: ' + str(x))
 
 	def outputString(self):
-		return 'CubicSpline ' + str(len(self.coefs)) + ' ' + ' '.join(map(lambda x: ' '.join(map(str, [x[1]] + x[0])), zip(self.coefs, self.xvs[:-1]))) + ' ' + str(self.xvs[-1])
+		return 'CubicSpline ' + str(len(self.coefs)) + ' ' + ' '.join([' '.join(map(str, [x[1]] + x[0])) for x in zip(self.coefs, self.xvs[:-1])]) + ' ' + str(self.xvs[-1])
 
 def plotInterpolation(func_by_name, min_x, max_x, num_x):
 	xs = []
@@ -123,12 +123,12 @@ def plotInterpolation(func_by_name, min_x, max_x, num_x):
 		this_x = float(max_x - min_x) / float(num_x - 1) * float(i) + min_x
 		xs.append(this_x)
 
-		for name, func in func_by_name.iteritems():
+		for name, func in func_by_name.items():
 			this_y = func(this_x)
 			ys_by_name[name].append(this_y)
 
 
-	for name, ys in ys_by_name.iteritems():
+	for name, ys in ys_by_name.items():
 		plt.plot(xs, ys, label = name)
 
 	plt.legend()
@@ -152,26 +152,26 @@ def getInterpolationFuncFromFile(filename):
 			if vr_p is not None:
 				raise Exception('Multiple vr points')
 
-			vr_p = Vec(*map(float, spl[1:]))
+			vr_p = Vec(*list(map(float, spl[1:])))
 
 		if spl[0] == 'VRD':
 			if vr_d is not None:
 				raise Exception('Multiple vr dirs')
 
-			vr_d = Vec(*map(float, spl[1:]))
+			vr_d = Vec(*list(map(float, spl[1:])))
 
 		if spl[0] == 'VRO':
 			if vr_rm is not None:
 				raise Exception('Multiple VR RMs')
 
-			vals = map(float, spl[1:])
+			vals = list(map(float, spl[1:]))
 			vr_rm = Matrix(*vals)
 
 		if spl[0] in ['TX1', 'TX2', 'RX1', 'RX2']:
 			if spl[1] == 'LinearPieceWise':
 				num = int(spl[2])
-				xs = map(float, spl[3::2])
-				ys = map(float, spl[4::2])
+				xs = list(map(float, spl[3::2]))
+				ys = list(map(float, spl[4::2]))
 
 				this_func = LinearPieceWise(xs, ys)
 
@@ -219,7 +219,7 @@ if __name__ == '__main__':
 		raise Exception('AAAAA')
 
 	vr_points = []
-	for i in xrange(0, len(vr_data), vr_repeats):
+	for i in range(0, len(vr_data), vr_repeats):
 		this_point_data = [dp.tvec for dp in vr_data[i:i + vr_repeats]]
 		sum_point = sum(this_point_data, Vec(0.0, 0.0, 0.0))
 		avg_point = sum_point.mult(1.0 / float(vr_repeats))
@@ -229,11 +229,11 @@ if __name__ == '__main__':
 	vr_line = calcVRLine(vr_points, vr_data[0].rot_mtx)
 
 	vr_vals = [vr_line.getVal(vrp) for vrp in vr_points]
-	print 'X vals:      ', vr_vals
-	print 'Dist to line:', [vrp.dist(vr_line.generatePoint(vr_line.getVal(vrp))) * 1000.0 for vrp in vr_points]
+	print('X vals:      ', vr_vals)
+	print('Dist to line:', [vrp.dist(vr_line.generatePoint(vr_line.getVal(vrp))) * 1000.0 for vrp in vr_points])
 	align_data = getVoltData(align_data_fname)
 
-	print 'Calculating interpolation function, using method:', func_type
+	print('Calculating interpolation function, using method:', func_type)
 	tx1_func = func_type(vr_vals, [dp.tx_gm1 for dp in align_data])
 	tx2_func = func_type(vr_vals, [dp.tx_gm2 for dp in align_data])
 	rx1_func = func_type(vr_vals, [dp.rx_gm1 for dp in align_data])
@@ -241,7 +241,7 @@ if __name__ == '__main__':
 
 	# plotInterpolation({'lin': LinearPieceWise(vr_vals, [dp.rx_gm1 for dp in align_data]), 'cub': CubicSpline(vr_vals, [dp.rx_gm1 for dp in align_data])}, min(vr_vals), max(vr_vals), 1000)
 
-	print 'Outputting interpolation values'
+	print('Outputting interpolation values')
 	out_f = open(output_fname, 'w')
 
 	out_f.write(' '.join(map(str, ['VRP', vr_line.p.x, vr_line.p.y, vr_line.p.z])) + '\n')

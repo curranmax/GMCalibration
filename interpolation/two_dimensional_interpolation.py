@@ -94,19 +94,19 @@ class Quad:
 
 			return zf(pos_i, pos_j)
 		else:
-			print 'Scipy solution:', (sp_i, sp_j)
-			print 'NEG VALS:', neg_i, neg_j
-			print 'POS VALS:', pos_i, pos_j
+			print('Scipy solution:', (sp_i, sp_j))
+			print('NEG VALS:', neg_i, neg_j)
+			print('POS VALS:', pos_i, pos_j)
 
 
-			print 'X vs. F_x(sp_i, sp_j): ', '(%.6f, %.6f)' % (this_x,     xf(sp_i, sp_j))
-			print 'T vs. F_t(sp_i, sp_j): ', '(%.6f, %.6f)' % (this_theta, tf(sp_i, sp_j))
+			print('X vs. F_x(sp_i, sp_j): ', '(%.6f, %.6f)' % (this_x,     xf(sp_i, sp_j)))
+			print('T vs. F_t(sp_i, sp_j): ', '(%.6f, %.6f)' % (this_theta, tf(sp_i, sp_j)))
 
-			print 'X vs. F_x(neg_i, neg_j): ', '(%.6f, %.6f)' % (this_x,     xf(neg_i, neg_j))
-			print 'T vs. F_t(neg_i, neg_j): ', '(%.6f, %.6f)' % (this_theta, tf(neg_i, neg_j))
+			print('X vs. F_x(neg_i, neg_j): ', '(%.6f, %.6f)' % (this_x,     xf(neg_i, neg_j)))
+			print('T vs. F_t(neg_i, neg_j): ', '(%.6f, %.6f)' % (this_theta, tf(neg_i, neg_j)))
 
-			print 'X vs. F_x(pos_i, pos_j): ', '(%.6f, %.6f)' % (this_x,     xf(pos_i, pos_j))
-			print 'T vs. F_t(pos_i, pos_j): ', '(%.6f, %.6f)' % (this_theta, tf(pos_i, pos_j))
+			print('X vs. F_x(pos_i, pos_j): ', '(%.6f, %.6f)' % (this_x,     xf(pos_i, pos_j)))
+			print('T vs. F_t(pos_i, pos_j): ', '(%.6f, %.6f)' % (this_theta, tf(pos_i, pos_j)))
 
 			raise Exception('What?!?!?!?!?')
 
@@ -115,7 +115,7 @@ class Quad:
 
 def getQuad(this_x, this_theta, quads = None, quads_by_ind = None):
 	if quads_by_ind is not None:
-		quads = [quad for _, quad in quads_by_ind.iteritems()]
+		quads = [quad for _, quad in quads_by_ind.items()]
 
 	for quad in quads:
 		if quad.check(this_x, this_theta):
@@ -137,7 +137,7 @@ def getTwoDimensionalInterpolationData(interpolation_data_fname, just_axis_and_l
 		spl = line.split()
 
 		if spl[0] in ['RA', 'RV', 'VRP', 'VRD']:
-			x, y, z = map(float, spl[1:])
+			x, y, z = list(map(float, spl[1:]))
 			v = Vec(x, y, z)
 
 			if spl[0] == 'RA':
@@ -151,13 +151,13 @@ def getTwoDimensionalInterpolationData(interpolation_data_fname, just_axis_and_l
 
 		elif spl[0] == 'V':
 			v_id = int(spl[1])
-			x, theta, tx1, tx2, rx1, rx2 = map(float, spl[2:])
+			x, theta, tx1, tx2, rx1, rx2 = list(map(float, spl[2:]))
 
 			vertex = Vertex(x, theta, tx1, tx2, rx1, rx2)
 			vertexes[v_id] = vertex
 
 		elif spl[0] == 'Q':
-			q_id, v1_id, v2_id, v3_id, v4_id = map(int, spl[1:])
+			q_id, v1_id, v2_id, v3_id, v4_id = list(map(int, spl[1:]))
 			quad = Quad(vertexes[v1_id], vertexes[v2_id], vertexes[v3_id], vertexes[v4_id])
 
 			quads.append(quad)
@@ -201,7 +201,7 @@ class TwoDimensionalInterpolation:
 			this_r1 = this_quad.interpolate(this_x, this_t, get_r1)
 			this_r2 = this_quad.interpolate(this_x, this_t, get_r2)
 
-		return map(lambda x: int(round(x)), (this_t1, this_t2, this_r1, this_r2))
+		return [int(round(x)) for x in (this_t1, this_t2, this_r1, this_r2)]
 
 if __name__ == '__main__':
 	vr_data_fname = '../data/7-8/vr_data_7-8.txt'
@@ -224,7 +224,7 @@ if __name__ == '__main__':
 	vr_data = reduceVRData(vr_data, vr_repeats)
 
 	if sum(num_rot_per_lin) != len(vr_data):
-		print sum(num_rot_per_lin), len(vr_data)
+		print(sum(num_rot_per_lin), len(vr_data))
 		raise Exception('Mismatch data')
 
 	# Find each rotation axis
@@ -244,7 +244,7 @@ if __name__ == '__main__':
 	avg_axis    = sum((ra.axis    for ra in rotation_axises), Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(rotation_axises)))
 	avg_ref_vec = sum((ra.ref_vec for ra in rotation_axises), Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(rotation_axises)))
 
-	print '\n'.join(map(str, [ra.ref_vec for ra in rotation_axises]))
+	print('\n'.join(map(str, [ra.ref_vec for ra in rotation_axises])))
 
 	rotation_axis = RotationAxis(avg_axis, avg_ref_vec)
 
@@ -262,8 +262,8 @@ if __name__ == '__main__':
 
 		locs.append((x, theta * 180.0 / math.pi))
 
-	print '(x, theta [in degrees]) for all points sorted:'
-	print '\n'.join(map(lambda v: '(%0.4f, %0.4f)' % v, sorted(locs)))
+	print('(x, theta [in degrees]) for all points sorted:')
+	print('\n'.join(['(%0.4f, %0.4f)' % v for v in sorted(locs)]))
 
 	# Get the align data
 	align_data = getVoltData(align_data_fname)
@@ -338,7 +338,7 @@ if __name__ == '__main__':
 
 		# vertexes
 		next_id = 1
-		for _, vertex in sorted(value_by_index.iteritems()):
+		for _, vertex in sorted(value_by_index.items()):
 			vertex.id = next_id
 			next_id += 1
 
@@ -346,7 +346,7 @@ if __name__ == '__main__':
 
 		# quads
 		next_id = 1
-		for _, quad in sorted(quads_by_ind.iteritems()):
+		for _, quad in sorted(quads_by_ind.items()):
 			out_f.write(' '.join(map(str, ['Q', next_id, quad.v1.id, quad.v2.id, quad.v3.id, quad.v4.id])) + '\n')
 			next_id += 1
 

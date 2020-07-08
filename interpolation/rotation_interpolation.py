@@ -69,7 +69,7 @@ def findAxisOfRotation(vr_data):
 	y_dim = plane.norm
 	z_dim = x_dim.cross(y_dim)
 
-	print 'Dims:', x_dim, y_dim, z_dim
+	print('Dims:', x_dim, y_dim, z_dim)
 
 	def circle_error(vals):
 		x, z, r = vals
@@ -83,12 +83,12 @@ def findAxisOfRotation(vr_data):
 
 	x, z, r = rv.x
 
-	print 'Final Errors:', circle_error(rv.x)
+	print('Final Errors:', circle_error(rv.x))
 	circle_center = x_dim.mult(x) + z_dim.mult(z) + plane.point
 
 	ra = RotationAxis(plane.norm)
 
-	print '-' * 80
+	print('-' * 80)
 
 	ref_vecs = []
 	for dp in vr_data:
@@ -115,7 +115,7 @@ def findAxisOfRotation(vr_data):
 		unrotated_position = ra.getUnrotatedPosition(dp.rot_mtx, dp.tvec)
 		vs.append(unrotated_position)
 
-		print theta * 180.0 / 3.14159, dp.tvec, unrotated_position
+		print(theta * 180.0 / 3.14159, dp.tvec, unrotated_position)
 
 	return ra
 
@@ -134,24 +134,24 @@ if __name__ == '__main__':
 	vr_data = reduceVRData(vr_data, vr_repeats)
 	
 	# Calculate the axis of rotation
-	print 'Calculating axis of rotation'
+	print('Calculating axis of rotation')
 	ra = findAxisOfRotation(vr_data)
 
 	# Calculate angles
 	vr_angles = [ra.getVal(dp.rot_mtx) for dp in vr_data]
-	print 'VR Angles:', ', '.join(map(lambda x: str(x * 180.0 / math.pi), vr_angles))
+	print('VR Angles:', ', '.join([str(x * 180.0 / math.pi) for x in vr_angles]))
 
 	# Get Align data
 	align_data = getVoltData(align_data_fname)
 
 	# Create the functions for each mirror
-	print 'Creating interpolation functions:', func_type
+	print('Creating interpolation functions:', func_type)
 	tx1_func = func_type(vr_angles, [dp.tx_gm1 for dp in align_data])
 	tx2_func = func_type(vr_angles, [dp.tx_gm2 for dp in align_data])
 	rx1_func = func_type(vr_angles, [dp.rx_gm1 for dp in align_data])
 	rx2_func = func_type(vr_angles, [dp.rx_gm2 for dp in align_data])
 
-	print 'Outputting values to:', output_fname
+	print('Outputting values to:', output_fname)
 	out_f = open(output_fname, 'w')
 
 	out_f.write('RA ' + ' '.join(map(str, [ra.axis.x, ra.axis.y, ra.axis.z])) + '\n')

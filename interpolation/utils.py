@@ -106,7 +106,7 @@ class Vec:
 		self.i = 0
 		return self
 
-	def next(self):
+	def __next__(self):
 		if self.i < 3:
 			if self.i == 0:
 				v = self.x
@@ -186,14 +186,14 @@ class Matrix:
 		return Matrix(*vs)
 
 	def __mul__(self, mtx):
-		new_vals = [[sum(self.vals[rn][a] * mtx.vals[b][cn] for a, b in zip(range(3), range(3))) for cn in range(3)] for rn in range(3)]
+		new_vals = [[sum(self.vals[rn][a] * mtx.vals[b][cn] for a, b in zip(list(range(3)), list(range(3)))) for cn in range(3)] for rn in range(3)]
 		new_mtx = Matrix(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 		new_mtx.vals = new_vals
 
 		return new_mtx
 
 	def __str__(self):
-		return '\n'.join(map(lambda row: '[' + ', '.join(map(str, row)) + ']', self.vals))
+		return '\n'.join(['[' + ', '.join(map(str, row)) + ']' for row in self.vals])
 
 angle_algo = 'ypr'
 def rotMatrixFromAngles(a1, a2, a3):
@@ -245,11 +245,11 @@ class Quat:
 		return m
 
 	def mag(self):
-		return math.sqrt(sum(map(lambda v: pow(v, 2.0), (self.w, self.x, self.y, self.z))))
+		return math.sqrt(sum([pow(v, 2.0) for v in (self.w, self.x, self.y, self.z)]))
 
 	def norm(self):
 		m = self.mag()
-		return Quat(*map(lambda v: v / m, (self.w, self.x, self.y, self.z)))
+		return Quat(*[v / m for v in (self.w, self.x, self.y, self.z)])
 
 	def mult(self, v):
 		return Quat(self.w * v, self.x * v, self.y * v, self.z * v)
@@ -261,7 +261,7 @@ class Quat:
 					self.z + quat.z)
 
 	def __str__(self):
-		return '(' + ', '.join(map(lambda v: v[0] + ': ' + str(v[1]), [('W', self.w), ('X', self.x), ('Y', self.y), ('Z', self.z)])) + ')'
+		return '(' + ', '.join([v[0] + ': ' + str(v[1]) for v in [('W', self.w), ('X', self.x), ('Y', self.y), ('Z', self.z)]]) + ')'
 
 class Plane:
 	def __init__(self, norm, point):
@@ -345,7 +345,7 @@ def getGMFromFile(fname):
 	for line in f:
 		token, x, y, z = line.split()
 
-		vec = Vec(*map(float, (x, y, z)))
+		vec = Vec(*list(map(float, (x, y, z))))
 
 		if token not in vals:
 			raise Exception('Unexpected token: ' + str(token))
@@ -463,19 +463,19 @@ def getVRData(fname):
 
 		time = int(spl[0])
 
-		tvec = Vec(*map(float, spl[2:5]))
+		tvec = Vec(*list(map(float, spl[2:5])))
 
 		if spl[5] == 'qWXYZ:':
-			w, x, y, z = map(float, spl[6:10])
+			w, x, y, z = list(map(float, spl[6:10]))
 		elif spl[5] == 'qXYZW:':
-			x, y, z, w = map(float, spl[6:10])
+			x, y, z, w = list(map(float, spl[6:10]))
 		else:
 			raise Exception('Invalid file format')
 
 		tracking_method = spl[11]
 
-		tx_vals = map(int, spl[13:15])
-		rx_vals = map(int, spl[16:18])
+		tx_vals = list(map(int, spl[13:15]))
+		rx_vals = list(map(int, spl[16:18]))
 
 		quat = Quat(w, x, y, z)
 
@@ -542,7 +542,7 @@ def getVoltData(fname):
 			for cname in cols:
 				cols[cname] = spl.index(cname)
 		else:
-			tx1, tx2, rx1, rx2 = map(int, (spl[cols['TX1']], spl[cols['TX2']], spl[cols['RX1']], spl[cols['RX2']]))
+			tx1, tx2, rx1, rx2 = list(map(int, (spl[cols['TX1']], spl[cols['TX2']], spl[cols['RX1']], spl[cols['RX2']])))
 
 			if cols['Dist'] is None:
 				dist = None

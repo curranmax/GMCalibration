@@ -78,11 +78,11 @@ if __name__ == '__main__':
 
 	rot_axis, vr_line, vertexes, quads = getTwoDimensionalInterpolationData(interpolation_fname)
 
-	x_min = min(v.x for _, v in vertexes.iteritems())
-	x_max = max(v.x for _, v in vertexes.iteritems())
+	x_min = min(v.x for _, v in vertexes.items())
+	x_max = max(v.x for _, v in vertexes.items())
 
-	t_min = min(v.theta for _, v in vertexes.iteritems())
-	t_max = max(v.theta for _, v in vertexes.iteritems())
+	t_min = min(v.theta for _, v in vertexes.items())
+	t_max = max(v.theta for _, v in vertexes.items())
 
 	n_x = 100
 	n_t = 100
@@ -123,8 +123,8 @@ if __name__ == '__main__':
 		v2s.append(v2)
 		v3s.append(v3)
 
-	print min(v2s), max(v2s)
-	print min(v3s), max(v3s)
+	print(min(v2s), max(v2s))
+	print(min(v3s), max(v3s))
 
 	avg_v2 = sum(v2s) / float(len(v2s))
 	avg_v3 = sum(v3s) / float(len(v3s))
