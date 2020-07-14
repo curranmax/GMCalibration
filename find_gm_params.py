@@ -1,6 +1,6 @@
 
 import numpy as np
-import cv2
+# import cv2
 import math
 import copy
 import random
@@ -536,7 +536,7 @@ def drawDots(collected_dots, gen_dots, out_fname = 'dot.jpg'):
 					if d.corner_ind != None:
 						img[yp + a][xp + b] = corner_colors[d.corner_ind]
 
-	cv2.imwrite(out_fname, img)
+	# cv2.imwrite(out_fname, img)
 
 def getDotsFromFile(filename):
 	f = open(filename, 'r')

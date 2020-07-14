@@ -14,6 +14,25 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
+# ======================================================================
+# ======================================================================
+# The two data files
+VR_DATA_FNAME    = '../data/7-13/vr_data_7-13.txt'
+ALIGN_DATA_FNAME = '../data/7-13/align_data_7-13.txt'
+
+# The number of angular data points collected for each rail position in order of collection.
+ANGLES_PER_RAIL_POSITION = [13, 13, 13, 1, 1, 1, 1, 1, 1, 1, 1]
+
+# The number of linear and angular positions with alignment data
+NUM_LINEAR_POSITIONS  = 3
+NUM_ANGULAR_POSITIONS = 3
+
+# The output file
+INTERPOLATION_DATA_FNAME = '../data/7-13/two_dimensional_interpolation_7-13.txt'
+
+# ======================================================================
+# ======================================================================
+
 class Vertex:
 	def __init__(self, x, theta, tx1 = None, tx2 = None, rx1 = None, rx2 = None):
 		self.x     = x
@@ -204,19 +223,23 @@ class TwoDimensionalInterpolation:
 		return [int(round(x)) for x in (this_t1, this_t2, this_r1, this_r2)]
 
 if __name__ == '__main__':
-	vr_data_fname = '../data/7-8/vr_data_7-8.txt'
-	align_data_fname = '../data/7-8/align_data_7-8.txt'
+	vr_data_fname = VR_DATA_FNAME
+	align_data_fname = ALIGN_DATA_FNAME
 
 	vr_repeats = 1000
-	num_rot_per_lin =  [13, 13, 13, 1, 1, 1, 1, 1, 1, 1, 1] # [13, 13, 13, 13, 1, 1, 1, 1, 1, 1, 1,1]
+	num_rot_per_lin =  ANGLES_PER_RAIL_POSITION
 
 	low_dist_thresh = 0.5
 
-	out_fname = '../data/7-8/two_dimensional_interpolation_7-8_v2.txt'
+	out_fname = INTERPOLATION_DATA_FNAME
 
-	n_x = 3
-	n_t = 3
+	n_x = NUM_LINEAR_POSITIONS
+	n_t = NUM_ANGULAR_POSITIONS
 
+	print('Input data files:', vr_data_fname, align_data_fname)
+	print('Output file:', out_fname)
+
+	print('Generating a grid of:', n_x, 'x', n_t)
 	missing_indexes = []
 
 	# Get VR data, and reduce it
@@ -226,6 +249,8 @@ if __name__ == '__main__':
 	if sum(num_rot_per_lin) != len(vr_data):
 		print(sum(num_rot_per_lin), len(vr_data))
 		raise Exception('Mismatch data')
+
+	print('Got', len(vr_data), 'vr data points')
 
 	# Find each rotation axis
 	i = 0
@@ -244,14 +269,16 @@ if __name__ == '__main__':
 	avg_axis    = sum((ra.axis    for ra in rotation_axises), Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(rotation_axises)))
 	avg_ref_vec = sum((ra.ref_vec for ra in rotation_axises), Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(rotation_axises)))
 
-	print('\n'.join(map(str, [ra.ref_vec for ra in rotation_axises])))
-
 	rotation_axis = RotationAxis(avg_axis, avg_ref_vec)
+
+	print('Found the rotation axis:', rotation_axis.axis)
 
 	# Find the VR Line
 	unrotated_tvecs = [rotation_axis.getUnrotatedPosition(dp.rot_mtx, dp.tvec) for dp in vr_data]
-	# print '\n'.join(map(str, [dp.tvec for dp in vr_data]))
+
 	vr_line = calcVRLine(unrotated_tvecs)
+
+	print('Found the line:', vr_line.d)
 
 	# Check angles and dists
 	locs = []
@@ -262,11 +289,13 @@ if __name__ == '__main__':
 
 		locs.append((x, theta * 180.0 / math.pi))
 
-	print('(x, theta [in degrees]) for all points sorted:')
-	print('\n'.join(['(%0.4f, %0.4f)' % v for v in sorted(locs)]))
+	# print('(x, theta [in degrees]) for all points sorted:')
+	# print('\n'.join(['(%0.4f, %0.4f)' % v for v in sorted(locs)]))
 
 	# Get the align data
 	align_data = getVoltData(align_data_fname)
+
+	print('Loaded GM data. There are', len(align_data), 'points')
 
 	# Filter out data that was collected just to find the rotation axis and line
 	old_vr_data, old_align_data = vr_data, align_data
@@ -275,6 +304,8 @@ if __name__ == '__main__':
 		if a_dp.dist >= low_dist_thresh:
 			vr_data.append(vr_dp)
 			align_data.append(a_dp)
+
+	print('Filtered out extra points, there are', len(vr_data), 'vertex points')
 
 	# Get the VR Vertexes
 	vr_values = []
@@ -311,7 +342,9 @@ if __name__ == '__main__':
 			cur_vals = []
 			cur_ind += 1
 
-	# TODO: Turn vertices into quads, make test to check if new point is in quad, do interpolation for arbitrary point in the quad
+	print('Vertexes sorted into a grid')
+
+	# Create Quads
 	quads_by_ind = dict()
 	corners = [(0, 0), (1, 0), (1, 1), (0, 1)]
 
@@ -324,8 +357,11 @@ if __name__ == '__main__':
 			this_quad = Quad(*[value_by_index[k] for k in this_corners])
 			quads_by_ind[(i, j)] = this_quad
 
-	# TODO Write the values out to a file
+	print('Created Quads from Vertexes')
+
+	# Write the values out to a file
 	if out_fname is not None and out_fname != '':
+		print('Writing data to file')
 		out_f = open(out_fname, 'w')
 
 		# rotation_axis
@@ -349,6 +385,8 @@ if __name__ == '__main__':
 		for _, quad in sorted(quads_by_ind.items()):
 			out_f.write(' '.join(map(str, ['Q', next_id, quad.v1.id, quad.v2.id, quad.v3.id, quad.v4.id])) + '\n')
 			next_id += 1
+
+		print('All data written to file')
 
 
 	# Plot

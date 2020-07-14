@@ -5,23 +5,26 @@ from convert_from_wall_to_vr import *
 from scipy.optimize import least_squares
 
 from copy import deepcopy
+import math
 
 # ======================================================================
 # ======================================================================
-# Starting Models. Once you get somethingn that works, you can use those results here
-TX_MODEL_FNAME = 'data/3-4/tx_gm_vr_3-4.txt'
-RX_MODEL_FNAME = 'data/3-4/rx_gm_vr_3-4.txt'
+# Starting Models. Once you get something that works, you can use those results here
+TX_MODEL_FNAME = 'data/7-13_R/tx_gm_vr_7-13.txt'
+RX_MODEL_FNAME = 'data/7-13_R/rx_gm_vr_7-13.txt'
 
-FIX_TX_POSITION = False
-INIT_TX_POSITIONO = Vec(0.40069934, 0.98062328, 0.36487804)
+FIX_MODEL_POSITIONS = False
+INIT_TX_POSITION = Vec(0.40069934, 0.98062328, 0.36487804)
+ADJUST_TX_MATRIX = rotMatrixFromAngles(0.0, -math.pi/2, 0.0)
+ADJUST_RX_MATRIX = rotMatrixFromAngles(0.0, -math.pi/2, 0.0)
 
 # The two data files
-VR_DATA_FNAME    = 'data/3-6/vr_data_3-6.txt'
-ALIGN_DATA_FNAME = 'data/3-6/align_data_3-6.txt'
+VR_DATA_FNAME    = 'data/7-13/vr_data_7-13.txt'
+ALIGN_DATA_FNAME = 'data/7-13/align_data_7-13.txt'
 
-# THe output files
-NEW_TX_MODEL_FNAME = 'data/3-6/tx_gm_vr_3-6.txt'
-NEW_RX_MODEL_FNAME = 'data/3-6/rx_gm_vr_3-6.txt'
+# The output files
+NEW_TX_MODEL_FNAME = 'data/7-13/tx_gm_vr_7-13.txt'
+NEW_RX_MODEL_FNAME = 'data/7-13/rx_gm_vr_7-13.txt'
 
 # ======================================================================
 # ======================================================================
@@ -70,7 +73,7 @@ def processData(vr_data, volt_data, n = 1, low_dist_thresh = 0.0):
 
 	full_data = []
 	for i in range(0, len(vr_data), n):
-		if volt_data[i / n].dist < low_dist_thresh:
+		if volt_data[int(i / n)].dist < low_dist_thresh:
 			continue
 
 		avg_tvec = Vec(0.0, 0.0, 0.0)
@@ -84,7 +87,7 @@ def processData(vr_data, volt_data, n = 1, low_dist_thresh = 0.0):
 		avg_tvec    = avg_tvec.mult(1.0 / float(n))
 		avg_rot_mtx = computeAvgQuat(all_quats).toRotMatrix()
 
-		full_data.append((VRDataPoint(None, avg_tvec, avg_rot_mtx, None, None, None), volt_data[i / n]))
+		full_data.append((VRDataPoint(None, avg_tvec, avg_rot_mtx, None, None, None), volt_data[int(i / n)]))
 	return full_data
 
 def getLocalModel(gm_model):
@@ -201,7 +204,9 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 
 	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': 1e4}
 	
+	print('Starting model optimization')
 	rv = least_squares(func, init_guess,  bounds = (min_bounds, max_bounds), **stopping_constraints)
+	print('Finished model optimization')
 
 	print(rv.x)
 	vals = rv.x
@@ -257,19 +262,26 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 	return local_tx_gm_model.move(tx_rot_mtx, tx_tvec), local_rx_gm_model.move(rx_rot_mtx, rx_tvec)
 
 def testStuff(tx_gm_model, rx_gm_model, full_data):
+	print('\nStart Sanity Check:')
 	p, d = tx_gm_model.getOutput(pow(2, 15), pow(2, 15))
-	print('TX:', p, d)
-	print('Second Vec should be approx:', Vec(0.0, 0.0, 1.0))
+	print('TX')
+	print('Beam Launch Point: ', p)
+	print('Should be close to:', INIT_TX_POSITION)
+	print('Beam Launch Dir:   ', d)
+	print('Should be close to:', Vec(-1.0, 0.0, 0.0), '\n')
 
 	def_vr_p = full_data[1][0]
-
-	print(def_vr_p.rot_mtx)
 
 	def_rx_gm_model = rx_gm_model.move(def_vr_p.rot_mtx, def_vr_p.tvec)
 
 	p, d = def_rx_gm_model.getOutput(pow(2, 15), pow(2, 15))
-	print('RX:', p, d)
-	print('Second Vec should be approx:', Vec(0.0, 0.0, -1.0))
+	print('RX')
+	print('Beam Launch Point: ', p)
+	print('Should be close to:', def_vr_p.tvec)
+	print('Beam Launch Dir:   ', d)
+	print('Should be close to:', Vec(1.0, 0.0, 0.0))
+
+	print('End Sanity Check\n')
 
 def findConversionBetweenVRSpaces():
 	old_vr_data = getVRData('data/8-8/vr_data_8-8.txt')
@@ -298,6 +310,8 @@ def findConversionBetweenVRSpaces():
 	# print sum([con_pos.dist(new_dp.tvec) for con_pos, (new_dp, _) in zip(converted_vr_pos, new_avg_data)]) / float(len(converted_vr_pos)) * 1000.0, 'mm'
 
 if __name__ == '__main__':
+	print('a')
+
 	tx_gm_model_fname = TX_MODEL_FNAME
 	rx_gm_model_fname = RX_MODEL_FNAME
 
@@ -311,8 +325,8 @@ if __name__ == '__main__':
 	use_dist = False
 	dist_err = 0.5
 
-	new_tx_gm_model_fname = NEW_TX_FNAME
-	new_rx_gm_model_fname = NEW_RX_FNAME
+	new_tx_gm_model_fname = NEW_TX_MODEL_FNAME
+	new_rx_gm_model_fname = NEW_RX_MODEL_FNAME
 
 	print('TX Model:', tx_gm_model_fname)
 	print('RX Model:', rx_gm_model_fname)
@@ -333,39 +347,10 @@ if __name__ == '__main__':
 	tx_gm_model = getGMFromFile(tx_gm_model_fname)
 	rx_gm_model = getGMFromFile(rx_gm_model_fname)
 
-  print tx_gm_model
-
-  quit()
-
-	# tx_gm_model.scale(1.0 / 1000.0)
-	# rx_gm_model.scale(1.0 / 1000.0)
-	
-	# CONVERTS THE TX GM FROM LOCAL TO VR-SPACE
-	# rail_dir = Vec(-0.998484214442, -0.00707444409786, -0.0545822842292)
-
-	# vr_to_tx_dir = rail_dir.cross(Vec(0.0, 1.0, 0.0))
-
-	# vr_perp_pos = Vec(0.1758, 1.1352, -0.4984)
-	# vr_to_tx_distance = 1.04
-
-	# tx_height = 0.09082
-	# vr_height = 0.13620
-
-	# tx_init_vr_pos = vr_perp_pos + vr_to_tx_dir.mult(vr_to_tx_distance) - Vec(0.0, vr_height, 0.0) + Vec(0.0, tx_height, 0.0)
-	# tx_init_vr_ori = rotMatrixFromAngles(0.0, math.pi, 0.0)
-
-	# rx_init_vr_pos = Vec(-0.225, 0.08772 - 0.13620, 0.13517)
-	# rx_init_vr_ori = rotMatrixFromAngles(0.0, 0.0, 0.0)
-
-	# tx_init_vr_pos = Vec(0.32419366,  0.94709523, -1.54457414)
-	# tx_init_vr_ori = rotMatrixFromAngles(-0.42893532391, -0.0697981620592, -0.0765762330009) * rotMatrixFromAngles(0.0, math.pi, 0.0)
-
-	# rx_init_vr_pos = Vec(-0.1276891,  -0.20371923,  0.06273378)
-	# rx_init_vr_ori = rotMatrixFromAngles(-0.42893532391, -0.0697981620592, -0.0765762330009)
-	
-	# tx_gm_model = tx_gm_model.move(tx_init_vr_ori, tx_init_vr_pos)
-	# rx_gm_model = rx_gm_model.move(rx_init_vr_ori, rx_init_vr_pos)
-
+	if FIX_MODEL_POSITIONS:
+		tx_gm_model = tx_gm_model.move(rotMatrixFromAngles(0.0, 0.0, 0.0), tx_gm_model.init_point.mult(-1.0))
+		tx_gm_model = tx_gm_model.move(ADJUST_TX_MATRIX, INIT_TX_POSITION)
+		rx_gm_model = rx_gm_model.move(ADJUST_RX_MATRIX, Vec(0.0, 0.0, 0.0))
 
 	# Get Data
 	full_data = []
@@ -374,6 +359,9 @@ if __name__ == '__main__':
 		volt_data = getVoltData(volt_data_fname)
 
 		full_data += processData(vr_data, volt_data, n = num_vr_per_volt, low_dist_thresh = low_dist_thresh)
+
+	if FIX_MODEL_POSITIONS:
+		testStuff(tx_gm_model, rx_gm_model, full_data)
 
 	# Adjust Models
 	new_tx_gm_model, new_rx_gm_model = adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = use_dist, dist_err = dist_err, adjust_tx_input_beam = False)

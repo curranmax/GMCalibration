@@ -35,7 +35,6 @@ class RotationAxis:
 		rot_mtx = rotMatrix(self.axis, theta)
 
 		this_ref_vec = rot_mtx.mult(self.ref_vec)
-
 		this_ra_point = tvec - this_ref_vec
 
 		return this_ra_point + self.ref_vec
@@ -59,63 +58,31 @@ def findAxisOfRotation(vr_data):
 	alpha, beta, d = rv.x
 
 	norm = vecFromAngle(alpha, beta)
-	point = norm.mult(d)
+	ra = RotationAxis(norm)
 
-	plane = Plane(norm, point)
+	def ref_vec_error(vals):
+		this_ref_vec = Vec(*vals)
 
-	# 2) Find the point on the plane that is the center of the circle of the points
+		points = []
+		for dp in vr_data:
+			theta = ra.getVal(dp.rot_mtx)
 
-	x_dim = Vec(1.0, 0.0, 0.0) - plane.norm.mult(Vec(1.0, 0.0, 0.0).dot(plane.norm))
-	y_dim = plane.norm
-	z_dim = x_dim.cross(y_dim)
+			rot_mtx = rotMatrix(ra.axis, theta)
 
-	print('Dims:', x_dim, y_dim, z_dim)
+			rot_ref_vec = rot_mtx.mult(this_ref_vec)
+			this_ra_point = dp.tvec - rot_ref_vec
 
-	def circle_error(vals):
-		x, z, r = vals
+			points.append(this_ra_point + this_ref_vec)
 
-		circle_center = x_dim.mult(x) + z_dim.mult(z) + plane.point
+		avg_point = sum(points, Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(points)))
 
-		errs = [dp.tvec.dist(circle_center) - r for dp in vr_data]
-		return errs
+		return [p.dist(avg_point) for p in points]
 
-	rv = least_squares(circle_error, (0.0, 0.0, 0.0), bounds = ((-1.0, -1.0, 0.0), (1.0, 1.0, 0.5)), **stopping_constraints)
+	rv = least_squares(ref_vec_error, (0.0, 0.0, 0.0), bounds = ((0.0, 0.0, 0.0), (0.5, 0.5, 0.5)), **stopping_constraints)
 
-	x, z, r = rv.x
+	ref_vec = Vec(*rv.x)
 
-	print('Final Errors:', circle_error(rv.x))
-	circle_center = x_dim.mult(x) + z_dim.mult(z) + plane.point
-
-	ra = RotationAxis(plane.norm)
-
-	print('-' * 80)
-
-	ref_vecs = []
-	for dp in vr_data:
-		theta = ra.getVal(dp.rot_mtx)
-
-		this_rel_vec = dp.tvec - circle_center
-		this_rel_vec = (this_rel_vec - ra.axis.mult(ra.axis.dot(this_rel_vec))).norm().mult(r)
-
-		inv_rot_mtx = rotMatrix(ra.axis, -theta)
-
-		this_ref_vec = inv_rot_mtx.mult(this_rel_vec)
-
-		ref_vecs.append(this_ref_vec)
-
-	avg_ref_vec = sum(ref_vecs, Vec(0.0, 0.0, 0.0)).mult(1.0 / float(len(ref_vecs)))
-	ra.ref_vec = avg_ref_vec
-
-	# TMP
-	
-	vs = []
-	for dp in vr_data:
-		theta = ra.getVal(dp.rot_mtx)
-
-		unrotated_position = ra.getUnrotatedPosition(dp.rot_mtx, dp.tvec)
-		vs.append(unrotated_position)
-
-		print(theta * 180.0 / 3.14159, dp.tvec, unrotated_position)
+	ra.ref_vec = ref_vec
 
 	return ra
 
