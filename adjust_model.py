@@ -10,21 +10,21 @@ import math
 # ======================================================================
 # ======================================================================
 # Starting Models. Once you get something that works, you can use those results here
-TX_MODEL_FNAME = 'data/7-13_R/tx_gm_vr_7-13.txt'
-RX_MODEL_FNAME = 'data/7-13_R/rx_gm_vr_7-13.txt'
+TX_MODEL_FNAME = 'data/3-4/tx_gm_vr_3-4.txt'
+RX_MODEL_FNAME = 'data/3-4/rx_gm_vr_3-4.txt'
 
-FIX_MODEL_POSITIONS = False
-INIT_TX_POSITION = Vec(0.40069934, 0.98062328, 0.36487804)
+FIX_MODEL_POSITIONS = True
+INIT_TX_POSITION = Vec(0.40069934, 0.190492, -0.25)
 ADJUST_TX_MATRIX = rotMatrixFromAngles(0.0, -math.pi/2, 0.0)
-ADJUST_RX_MATRIX = rotMatrixFromAngles(0.0, -math.pi/2, 0.0)
+ADJUST_RX_MATRIX = rotMatrixFromAngles(0.0, 0.0, 0.0)
 
 # The two data files
 VR_DATA_FNAME    = 'data/7-13/vr_data_7-13.txt'
 ALIGN_DATA_FNAME = 'data/7-13/align_data_7-13.txt'
 
 # The output files
-NEW_TX_MODEL_FNAME = 'data/7-13/tx_gm_vr_7-13.txt'
-NEW_RX_MODEL_FNAME = 'data/7-13/rx_gm_vr_7-13.txt'
+NEW_TX_MODEL_FNAME = 'data/7-13/tx_gm_vr_7-13_v2.txt'
+NEW_RX_MODEL_FNAME = 'data/7-13/rx_gm_vr_7-13_v2.txt'
 
 # ======================================================================
 # ======================================================================
@@ -178,12 +178,14 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 					[init_rx_tvec.x, init_rx_tvec.y, init_rx_tvec.z] + \
 					list(init_rx_rot_mtx.getAngles())
 
-	bound = 10.0
-	print('Using bounds of:', bound * 1000.0, 'mm/mrad')
+	linear_bound = 1.0
+	angular_bound = 0.005
+	print('Using linear bounds of:', linear_bound * 1000.0, 'mm')
+	print('Using angular bounds of:', angular_bound * 1000.0, 'mrad')
 	print('')
 
-	min_bounds = [v - bound for v in init_guess]
-	max_bounds = [v + bound for v in init_guess]
+	min_bounds = [v - b for v, b in zip(init_guess, ([linear_bound] * 3 + [angular_bound] + [linear_bound] + [angular_bound]) * 2)]
+	max_bounds = [v + b for v, b in zip(init_guess, ([linear_bound] * 3 + [angular_bound] + [linear_bound] + [angular_bound]) * 2)]
 
 	if adjust_tx_input_beam:
 		init_guess += [0.0] * 4
@@ -202,7 +204,7 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 	print('Init Max all error:', max(init_tx_errs + init_rx_errs) * 1000.0, 'mm')
 	print('')
 
-	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': 1e4}
+	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': 1e10}
 	
 	print('Starting model optimization')
 	rv = least_squares(func, init_guess,  bounds = (min_bounds, max_bounds), **stopping_constraints)
@@ -310,8 +312,6 @@ def findConversionBetweenVRSpaces():
 	# print sum([con_pos.dist(new_dp.tvec) for con_pos, (new_dp, _) in zip(converted_vr_pos, new_avg_data)]) / float(len(converted_vr_pos)) * 1000.0, 'mm'
 
 if __name__ == '__main__':
-	print('a')
-
 	tx_gm_model_fname = TX_MODEL_FNAME
 	rx_gm_model_fname = RX_MODEL_FNAME
 
