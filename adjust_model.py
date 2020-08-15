@@ -445,6 +445,8 @@ def findConversionBetweenVRSpaces():
 	# print sum([con_pos.dist(new_dp.tvec) for con_pos, (new_dp, _) in zip(converted_vr_pos, new_avg_data)]) / float(len(converted_vr_pos)) * 1000.0, 'mm'
 
 if __name__ == '__main__':
+	print('a')
+
 	tx_gm_model_fname = TX_MODEL_FNAME
 	rx_gm_model_fname = RX_MODEL_FNAME
 
