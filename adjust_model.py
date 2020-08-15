@@ -40,8 +40,8 @@ RX_LEFT_DIR = Vec( 1.0, 0.0, 0.0)
 ERROR_TYPE = 'gm_values'
 
 # Parameters of the Search
-LINEAR_BOUNDS = 10.0 # In meters
-ANGULAR_BOUNDS = 0.01 # In radians
+LINEAR_BOUNDS = 1.0 # In meters
+ANGULAR_BOUNDS = 3.5 # In radians
 
 # Max search iterations
 MAX_ITERS = 1e4
@@ -253,7 +253,7 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 
 	if adjust_tx_orientation:
 		init_guess += list(init_tx_rot_mtx.getAngles())
-		bounds += [angular_bound] * 2
+		bounds += [angular_bound] * 3
 
 	if adjust_rx_position:
 		init_guess += [init_rx_tvec.x, init_rx_tvec.y, init_rx_tvec.z]
@@ -261,7 +261,7 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 	
 	if adjust_rx_orientation:
 		init_guess += list(init_rx_rot_mtx.getAngles())
-		bounds += [angular_bound] * 2
+		bounds += [angular_bound] * 3
 
 	min_bounds = [v - b for v, b in zip(init_guess, bounds)]
 	max_bounds = [v + b for v, b in zip(init_guess, bounds)]
