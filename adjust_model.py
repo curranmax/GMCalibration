@@ -1,6 +1,7 @@
 
 from find_gm_params import *
 from convert_from_wall_to_vr import *
+from tracking import *
 
 from scipy.optimize import least_squares
 
@@ -10,21 +11,46 @@ import math
 # ======================================================================
 # ======================================================================
 # Starting Models. Once you get something that works, you can use those results here
-TX_MODEL_FNAME = 'data/3-4/tx_gm_vr_3-4.txt'
-RX_MODEL_FNAME = 'data/3-4/rx_gm_vr_3-4.txt'
 
-FIX_MODEL_POSITIONS = True
-INIT_TX_POSITION = Vec(0.40069934, 0.190492, -0.25)
-ADJUST_TX_MATRIX = rotMatrixFromAngles(0.0, -math.pi/2, 0.0)
-ADJUST_RX_MATRIX = rotMatrixFromAngles(0.0, 0.0, 0.0)
+TX_MODEL_FNAME = 'data/8-10/tx_gm_vr_8-10_2.txt'
+RX_MODEL_FNAME = 'data/8-10/rx_gm_vr_8-10_2.txt'
 
 # The two data files
-VR_DATA_FNAME    = 'data/7-13/vr_data_7-13.txt'
-ALIGN_DATA_FNAME = 'data/7-13/align_data_7-13.txt'
+VR_DATA_FNAME    = 'data/8-12/vr_data_8-12.txt'
+ALIGN_DATA_FNAME = 'data/8-12/align_data_8-12.txt'
 
 # The output files
-NEW_TX_MODEL_FNAME = 'data/7-13/tx_gm_vr_7-13_v2.txt'
-NEW_RX_MODEL_FNAME = 'data/7-13/rx_gm_vr_7-13_v2.txt'
+NEW_TX_MODEL_FNAME = 'data/8-12/tx_gm_vr_8-12_tmp.txt'
+NEW_RX_MODEL_FNAME = 'data/8-12/rx_gm_vr_8-12_tmp.txt'
+
+# Adjust Initial Values
+FIX_MODEL_POSITIONS = True
+INIT_TX_POSITION = Vec(0.024742774, 1.311485219, 1.601749131)
+INIT_RX_POSITION = Vec(-0.07342621, 0.197472645, -0.273909988) # Vec(0.273909988, 0.197472645, -0.07342621)
+ADJUST_TX_MATRIX = rotMatrixFromAngles(0.0, 0.0, 0.0)
+ADJUST_RX_MATRIX = rotMatrixFromAngles(0.0, math.pi, 0.0)
+
+VR_TO_TX = Vec(0.0, 0.0, 1.0)
+UP_DIR   = Vec(0.0, 1.0, 0.0)
+
+TX_LEFT_DIR = Vec(-1.0, 0.0, 0.0)
+RX_LEFT_DIR = Vec( 1.0, 0.0, 0.0)
+
+# Error type to use (must be either 'distance' or 'gm_values')
+ERROR_TYPE = 'gm_values'
+
+# Parameters of the Search
+LINEAR_BOUNDS = 10.0 # In meters
+ANGULAR_BOUNDS = 0.01 # In radians
+
+# Max search iterations
+MAX_ITERS = 1e4
+
+# Controls what values are adjustModel
+ADJUST_TX_POSITION = False
+ADJUST_TX_ORIENTATION = True
+ADJUST_RX_POSITION = False
+ADJUST_RX_ORIENTATION = True
 
 # ======================================================================
 # ======================================================================
@@ -110,28 +136,50 @@ def distanceToLineWithDist(p_0, d, t, exp_dist, dist_err):
 
 	return (p_0 + d.mult(new_k)).dist(t), k < 0.0
 
-def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err = 0.0, adjust_tx_input_beam = False):
+def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err = 0.0, adjust_tx_input_beam = False, outer_error_type = 'distance', adjust_tx_position = True, adjust_tx_orientation = True, adjust_rx_position = True, adjust_rx_orientation = True):
 	init_tx_tvec, init_tx_rot_mtx, local_tx_gm_model = getLocalModel(tx_gm_model)
 	init_rx_tvec, init_rx_rot_mtx, local_rx_gm_model = getLocalModel(rx_gm_model)
 
-	def func(vals, split = False):
-		tx_tvec    = Vec(*vals[0:3])
-		tx_rot_mtx = rotMatrixFromAngles(*vals[3:6])
+	def func(vals, split = False, error_type = outer_error_type):
+		x = 0
 
-		rx_tvec    = Vec(*vals[6:9])
-		rx_rot_mtx = rotMatrixFromAngles(*vals[9:12])
+		if adjust_tx_position:
+			tx_tvec = Vec(*vals[x : x+3])
+			x += 3
+		else:
+			tx_tvec = init_tx_tvec
+
+		if adjust_tx_orientation:
+			tx_rot_mtx = rotMatrixFromAngles(*vals[x : x+3])
+			x += 3
+		else:
+			tx_rot_mtx = init_tx_rot_mtx
+
+		if adjust_rx_position:
+			rx_tvec = Vec(*vals[x : x+3])
+			x += 3
+		else:
+			rx_tvec = init_rx_tvec
+
+		if adjust_rx_orientation:
+			rx_rot_mtx = rotMatrixFromAngles(*vals[x : x+3])
+			x += 3
+		else:
+			rx_rot_mtx = init_rx_rot_mtx
 
 		this_tx_gm_model = deepcopy(local_tx_gm_model)
 		this_rx_gm_model = deepcopy(local_rx_gm_model)
 
 		if adjust_tx_input_beam:
-			dif_init_point_y, dif_init_point_z = vals[12:14]
+			dif_init_point_y, dif_init_point_z = vals[x : x+2]
+			x += 2
 
 			this_tx_gm_model.init_point.y += dif_init_point_y
 			this_tx_gm_model.init_point.z += dif_init_point_z
 
 			old_alpha, old_beta = local_tx_gm_model.init_dir.getAngles()
-			dif_alpha, dif_beta = vals[14:16]
+			dif_alpha, dif_beta = vals[x : x+2]
+			x += 2
 
 			this_tx_gm_model.init_dir = vecFromAngle(old_alpha + dif_alpha, old_beta + dif_beta)
 
@@ -147,53 +195,84 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 		for vr_dp, volt_dp in full_data:
 			abs_rx_gm_model = this_rx_gm_model.move(vr_dp.rot_mtx, vr_dp.tvec)
 
-			tx_p, tx_d = this_tx_gm_model.getOutput(volt_dp.tx_gm1, volt_dp.tx_gm2)
-			rx_p, rx_d = abs_rx_gm_model.getOutput(volt_dp.rx_gm1, volt_dp.rx_gm2)
+			if error_type == 'distance':
+				tx_p, tx_d = this_tx_gm_model.getOutput(volt_dp.tx_gm1, volt_dp.tx_gm2)
+				rx_p, rx_d = abs_rx_gm_model.getOutput(volt_dp.rx_gm1, volt_dp.rx_gm2)
 
-			if use_dist:
-				if volt_dp.dist is None:
-					raise Exception('Trying to use distance when none is given')
+				if use_dist:
+					if volt_dp.dist is None:
+						raise Exception('Trying to use distance when none is given')
 
-				tx_err, _ = distanceToLineWithDist(tx_p, tx_d, rx_p, volt_dp.dist, dist_err)
-				rx_err, _ = distanceToLineWithDist(rx_p, rx_d, tx_p, volt_dp.dist, dist_err)
+					tx_err, _ = distanceToLineWithDist(tx_p, tx_d, rx_p, volt_dp.dist, dist_err)
+					rx_err, _ = distanceToLineWithDist(rx_p, rx_d, tx_p, volt_dp.dist, dist_err)
 
+				else:
+					tx_err, _ = distanceToLine(tx_p, tx_d, rx_p)
+					rx_err, _ = distanceToLine(rx_p, rx_d, tx_p)
+
+				tx_err = (tx_err,)
+				rx_err = (rx_err,)
+			elif error_type == 'gm_values':
+				tracking = LinkSearchTracking(100, SearchTracking(100, use_float = True))
+				tx1, tx2, rx1, rx2 = tracking(this_tx_gm_model, abs_rx_gm_model)
+
+				err_func = lambda x: x
+
+				tx_err = (err_func(tx1 - volt_dp.tx_gm1), err_func(tx2 - volt_dp.tx_gm2))
+				rx_err = (err_func(rx1 - volt_dp.rx_gm1), err_func(rx2 - volt_dp.rx_gm2))
 			else:
-				tx_err, _ = distanceToLine(tx_p, tx_d, rx_p)
-				rx_err, _ = distanceToLine(rx_p, rx_d, tx_p)
+				raise Exception('Unexpected error_type = %s' % error_type)
 
 			if split:
-				tx_errs.append(tx_err)
-				rx_errs.append(rx_err)
+				for v in tx_err:
+					tx_errs.append(v)
+				for v in rx_err:
+					rx_errs.append(v)
 			else:
-				errs.append(tx_err)
-				errs.append(rx_err)
+				for v in tx_err:
+					errs.append(v)
+				for v in rx_err:
+					errs.append(v)
 
 		if split:
 			return tx_errs, rx_errs
 		else:
 			return errs
 
-	init_guess = [init_tx_tvec.x, init_tx_tvec.y, init_tx_tvec.z] + \
-					list(init_tx_rot_mtx.getAngles()) + \
-					[init_rx_tvec.x, init_rx_tvec.y, init_rx_tvec.z] + \
-					list(init_rx_rot_mtx.getAngles())
-
-	linear_bound = 1.0
-	angular_bound = 0.005
+	linear_bound = LINEAR_BOUNDS
+	angular_bound = ANGULAR_BOUNDS
 	print('Using linear bounds of:', linear_bound * 1000.0, 'mm')
 	print('Using angular bounds of:', angular_bound * 1000.0, 'mrad')
 	print('')
 
-	min_bounds = [v - b for v, b in zip(init_guess, ([linear_bound] * 3 + [angular_bound] + [linear_bound] + [angular_bound]) * 2)]
-	max_bounds = [v + b for v, b in zip(init_guess, ([linear_bound] * 3 + [angular_bound] + [linear_bound] + [angular_bound]) * 2)]
+	init_guess = []
+	bounds = []
+	if adjust_tx_position:
+		init_guess += [init_tx_tvec.x, init_tx_tvec.y, init_tx_tvec.z]
+		bounds += [linear_bound] * 3
+
+	if adjust_tx_orientation:
+		init_guess += list(init_tx_rot_mtx.getAngles())
+		bounds += [angular_bound] * 2
+
+	if adjust_rx_position:
+		init_guess += [init_rx_tvec.x, init_rx_tvec.y, init_rx_tvec.z]
+		bounds += [linear_bound] * 3
+	
+	if adjust_rx_orientation:
+		init_guess += list(init_rx_rot_mtx.getAngles())
+		bounds += [angular_bound] * 2
+
+	min_bounds = [v - b for v, b in zip(init_guess, bounds)]
+	max_bounds = [v + b for v, b in zip(init_guess, bounds)]
 
 	if adjust_tx_input_beam:
 		init_guess += [0.0] * 4
 		min_bounds += [-0.01] * 4
 		max_bounds += [ 0.01] * 4
 
-	init_tx_errs, init_rx_errs = func(init_guess, split = True)
-
+	init_tx_errs, init_rx_errs = func(init_guess, split = True, error_type = 'distance')
+	print('Distance based Error:')
 	print('Init Avg TX error:', sum(init_tx_errs) / float(len(init_tx_errs)) * 1000.0, 'mm')
 	print('Init Max TX error:', max(init_tx_errs) * 1000.0, 'mm')
 	print('')
@@ -204,37 +283,74 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 	print('Init Max all error:', max(init_tx_errs + init_rx_errs) * 1000.0, 'mm')
 	print('')
 
-	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': 1e10}
+	angle_conversion_factor = 40.0 / 65536.0 * math.pi / 180.0
+
+	init_tx_errs, init_rx_errs = func(init_guess, split = True, error_type = 'gm_values')
+	init_tx_errs, init_rx_errs = list(map(abs, init_tx_errs)), list(map(abs, init_rx_errs))
+	print('Mirror-Angle based Error:')
+	print('Init Avg TX error:', sum(init_tx_errs) / float(len(init_tx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
+	print('Init Max TX error:', max(init_tx_errs) * angle_conversion_factor * 1000.0, 'mrad')
+	print('')
+	print('Init Avg RX error:', sum(init_rx_errs) / float(len(init_rx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
+	print('Init Max RX error:', max(init_rx_errs) * angle_conversion_factor * 1000.0, 'mrad')
+	print('')
+	print('Init Avg all error:', sum(init_tx_errs + init_rx_errs) / float(len(init_tx_errs + init_rx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
+	print('Init Max all error:', max(init_tx_errs + init_rx_errs) * angle_conversion_factor * 1000.0, 'mrad')
+	print('')
+
+	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': MAX_ITERS}
 	
 	print('Starting model optimization')
 	rv = least_squares(func, init_guess,  bounds = (min_bounds, max_bounds), **stopping_constraints)
 	print('Finished model optimization')
+	print('')
 
-	print(rv.x)
 	vals = rv.x
-	
-	tx_tvec    = Vec(*vals[0:3])
-	tx_rot_mtx = rotMatrixFromAngles(*vals[3:6])
-	rx_tvec    = Vec(*vals[6:9])
-	rx_rot_mtx = rotMatrixFromAngles(*vals[9:12])
+	print('Raw output:', vals)
+	print('')
 
-	final_input = [tx_tvec.x, tx_tvec.y, tx_tvec.z] + list(tx_rot_mtx.getAngles()) + [rx_tvec.x, rx_tvec.y, rx_tvec.z] + list(rx_rot_mtx.getAngles())
+	x = 0
+
+	if adjust_tx_position:
+		tx_tvec = Vec(*vals[x : x+3])
+		x += 3
+	else:
+		tx_tvec = init_tx_tvec
+
+	if adjust_tx_orientation:
+		tx_rot_mtx = rotMatrixFromAngles(*vals[x : x+3])
+		x += 3
+	else:
+		tx_rot_mtx = init_tx_rot_mtx
+
+	if adjust_rx_position:
+		rx_tvec = Vec(*vals[x : x+3])
+		x += 3
+	else:
+		rx_tvec = init_rx_tvec
+
+	if adjust_rx_orientation:
+		rx_rot_mtx = rotMatrixFromAngles(*vals[x : x+3])
+		x += 3
+	else:
+		rx_rot_mtx = init_rx_rot_mtx
+
+	final_input = list(vals)
 
 	if adjust_tx_input_beam:
-		dif_init_point_y, dif_init_point_z = vals[12:14]
-		dif_alpha, dif_beta = vals[14:16]
+		dif_init_point_y, dif_init_point_z = vals[x : x+2]
+		x += 2
 
-		final_input += [dif_init_point_y, dif_init_point_z, dif_alpha, dif_beta]
-
-	final_tx_errs, final_rx_errs = func(final_input, split = True)
+		dif_alpha, dif_beta = vals[x : x+2]
+		x += 2
 
 	print('TX tvec:', tx_tvec - init_tx_tvec)
-	print('TX rm angles:', '(' + ', '.join(map(str, vals[3:6]))  +')')
+	print('TX rm angles:', '(' + ', '.join(map(str, tx_rot_mtx.getAngles()))  +')')
 	print('TX rot mtx:')
 	print(tx_rot_mtx)
 	print('')
 	print('RX tvec:', rx_tvec - init_rx_tvec)
-	print('RX rm angles:', '(' + ', '.join(map(str, vals[9:12]))  +')')
+	print('RX rm angles:', '(' + ', '.join(map(str, rx_rot_mtx.getAngles()))  +')')
 	print('RX rot mtx:')
 	print(rx_rot_mtx)
 	print('')
@@ -243,15 +359,29 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 		print('Dif TX init point:', dif_init_point_y, dif_init_point_z)
 		print('Dif TX init dir:  ', dif_alpha, dif_beta)
 
+	final_tx_errs, final_rx_errs = func(final_input, split = True, error_type = 'distance')
+	print('Distance based Error:')
 	print('Avg TX error:', sum(final_tx_errs) / float(len(final_tx_errs)) * 1000.0, 'mm')
 	print('Max TX error:', max(final_tx_errs) * 1000.0, 'mm')
 	print('')
 	print('Avg RX error:', sum(final_rx_errs) / float(len(final_rx_errs)) * 1000.0, 'mm')
 	print('Max RX error:', max(final_rx_errs) * 1000.0, 'mm')
 	print('')
-
 	print('Avg total error:', sum(final_tx_errs + final_rx_errs) / float(len(final_tx_errs + final_rx_errs)) * 1000.0, 'mm')
 	print('Max total error:', max(final_tx_errs + final_rx_errs) * 1000.0, 'mm')
+	print('')
+
+	final_tx_errs, final_rx_errs = func(final_input, split = True, error_type = 'gm_values')
+	final_tx_errs, final_rx_errs = list(map(abs, final_tx_errs)), list(map(abs, final_rx_errs))
+	print('Mirror-Angle based Error:')
+	print('Avg TX error:', sum(final_tx_errs) / float(len(final_tx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
+	print('Max TX error:', max(final_tx_errs) * angle_conversion_factor * 1000.0, 'mrad')
+	print('')
+	print('Avg RX error:', sum(final_rx_errs) / float(len(final_rx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
+	print('Max RX error:', max(final_rx_errs) * angle_conversion_factor * 1000.0, 'mrad')
+	print('')
+	print('Avg all error:', sum(final_tx_errs + final_rx_errs) / float(len(final_tx_errs + final_rx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
+	print('Max all error:', max(final_tx_errs + final_rx_errs) * angle_conversion_factor * 1000.0, 'mrad')
 	print('')
 
 	if adjust_tx_input_beam:
@@ -265,23 +395,35 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 
 def testStuff(tx_gm_model, rx_gm_model, full_data):
 	print('\nStart Sanity Check:')
-	p, d = tx_gm_model.getOutput(pow(2, 15), pow(2, 15))
+	p, d   = tx_gm_model.getOutput(pow(2, 15), pow(2, 15))
+	p2, d2 = tx_gm_model.getOutput(pow(2, 15), pow(2, 16))
+	p3, d3 = tx_gm_model.getOutput(pow(2, 16), pow(2, 15))
 	print('TX')
 	print('Beam Launch Point: ', p)
 	print('Should be close to:', INIT_TX_POSITION)
 	print('Beam Launch Dir:   ', d)
-	print('Should be close to:', Vec(-1.0, 0.0, 0.0), '\n')
+	print('Should be close to:', VR_TO_TX.mult(-1.0))
+	print('Vertical beam dir change:  ', (d2 - d.mult(d.dot(d2))).norm())
+	print('Should be close to:        ', UP_DIR)
+	print('Horizontal beam dir change:', (d3 - d.mult(d.dot(d3))).norm())
+	print('Should be close to:        ', TX_LEFT_DIR, '\n')
 
 	def_vr_p = full_data[1][0]
 
 	def_rx_gm_model = rx_gm_model.move(def_vr_p.rot_mtx, def_vr_p.tvec)
 
-	p, d = def_rx_gm_model.getOutput(pow(2, 15), pow(2, 15))
+	p, d   = def_rx_gm_model.getOutput(pow(2, 15), pow(2, 15))
+	p2, d2 = def_rx_gm_model.getOutput(pow(2, 15), pow(2, 16))
+	p3, d3 = def_rx_gm_model.getOutput(pow(2, 16), pow(2, 15))
 	print('RX')
 	print('Beam Launch Point: ', p)
-	print('Should be close to:', def_vr_p.tvec)
+	print('Should be close to:', def_vr_p.tvec + def_vr_p.rot_mtx.mult(INIT_RX_POSITION))
 	print('Beam Launch Dir:   ', d)
-	print('Should be close to:', Vec(1.0, 0.0, 0.0))
+	print('Should be close to:', VR_TO_TX)
+	print('Vertical beam dir change:', (d2 - d.mult(d.dot(d2))).norm())
+	print('Should be close to:      ', UP_DIR)
+	print('Horizontal beam dir change:', (d3 - d.mult(d.dot(d3))).norm())
+	print('Should be close to:        ', RX_LEFT_DIR, '\n')
 
 	print('End Sanity Check\n')
 
@@ -349,8 +491,9 @@ if __name__ == '__main__':
 
 	if FIX_MODEL_POSITIONS:
 		tx_gm_model = tx_gm_model.move(rotMatrixFromAngles(0.0, 0.0, 0.0), tx_gm_model.init_point.mult(-1.0))
+		rx_gm_model = rx_gm_model.move(rotMatrixFromAngles(0.0, 0.0, 0.0), rx_gm_model.init_point.mult(-1.0))
 		tx_gm_model = tx_gm_model.move(ADJUST_TX_MATRIX, INIT_TX_POSITION)
-		rx_gm_model = rx_gm_model.move(ADJUST_RX_MATRIX, Vec(0.0, 0.0, 0.0))
+		rx_gm_model = rx_gm_model.move(ADJUST_RX_MATRIX, INIT_RX_POSITION)
 
 	# Get Data
 	full_data = []
@@ -360,13 +503,14 @@ if __name__ == '__main__':
 
 		full_data += processData(vr_data, volt_data, n = num_vr_per_volt, low_dist_thresh = low_dist_thresh)
 
-	if FIX_MODEL_POSITIONS:
-		testStuff(tx_gm_model, rx_gm_model, full_data)
+	testStuff(tx_gm_model, rx_gm_model, full_data)
 
 	# Adjust Models
-	new_tx_gm_model, new_rx_gm_model = adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = use_dist, dist_err = dist_err, adjust_tx_input_beam = False)
+	new_tx_gm_model, new_rx_gm_model = adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = use_dist, dist_err = dist_err, adjust_tx_input_beam = False, outer_error_type = ERROR_TYPE, adjust_tx_position = ADJUST_TX_POSITION, adjust_tx_orientation = ADJUST_TX_ORIENTATION, adjust_rx_position = ADJUST_RX_POSITION, adjust_rx_orientation = ADJUST_RX_ORIENTATION)
 
 	if new_tx_gm_model_fname is not None:
 		outputGM(new_tx_gm_model, new_tx_gm_model_fname)
 	if new_rx_gm_model_fname is not None:
 		outputGM(new_rx_gm_model, new_rx_gm_model_fname)
+
+	testStuff(new_tx_gm_model, new_rx_gm_model, full_data)
