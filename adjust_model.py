@@ -193,6 +193,9 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 			errs = []
 
 		for vr_dp, volt_dp in full_data:
+			print('-' * 80)
+			print(vr_dp.tvec)
+			print(vr_dp.rot_mtx)
 			abs_rx_gm_model = this_rx_gm_model.move(vr_dp.rot_mtx, vr_dp.tvec)
 
 			if error_type == 'distance':
@@ -233,6 +236,7 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 					errs.append(v)
 				for v in rx_err:
 					errs.append(v)
+			print('-' * 80)
 
 		if split:
 			return tx_errs, rx_errs
@@ -297,6 +301,8 @@ def adjustModel(tx_gm_model, rx_gm_model, full_data, use_dist = False, dist_err 
 	print('Init Avg all error:', sum(init_tx_errs + init_rx_errs) / float(len(init_tx_errs + init_rx_errs)) * angle_conversion_factor * 1000.0, 'mrad')
 	print('Init Max all error:', max(init_tx_errs + init_rx_errs) * angle_conversion_factor * 1000.0, 'mrad')
 	print('')
+
+	quit()
 
 	stopping_constraints = {'xtol': 2.3e-16, 'ftol': 2.3e-16, 'gtol': 2.3e-16, 'max_nfev': MAX_ITERS}
 	

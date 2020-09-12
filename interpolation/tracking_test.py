@@ -67,7 +67,7 @@ class SearchTracking:
 
 			cur_gmh += a_int
 			cur_gmv += b_int
-		# print 'ITERS:', i
+		# print('ITERS:', i)
 		return cur_gmh, cur_gmv
 
 class ScipyTracking:
@@ -235,6 +235,7 @@ def fullLinkTracking(tx_gm, rx_rel_gm, num_points = 1, real_points = None, track
 	rx_errs = []
 
 	durs = []
+	num_iters = []
 
 	if num_points is not None and real_points is None:
 		pass
@@ -257,9 +258,10 @@ def fullLinkTracking(tx_gm, rx_rel_gm, num_points = 1, real_points = None, track
 		this_rx_gm = rx_rel_gm.move(vr_rmtx, vr_tvec)
 
 		start = datetime.now()
-		tx_gmh, tx_gmv, rx_gmh, rx_gmv, num_iters = tracking(tx_gm, this_rx_gm)
+		tx_gmh, tx_gmv, rx_gmh, rx_gmv, num_iter = tracking(tx_gm, this_rx_gm)
 		end = datetime.now()
 		durs.append((end - start).total_seconds())
+		num_iters.append(num_iter)
 		
 		if interpolation is not None:
 			int_tx_gmh, int_tx_gmv, int_rx_gmh, int_rx_gmv = interpolation(vr_tvec, vr_rmtx)
@@ -298,6 +300,10 @@ def fullLinkTracking(tx_gm, rx_rel_gm, num_points = 1, real_points = None, track
 	print('')
 	print('Max dur:', max(durs) * 1000.0, 'ms')
 	print('Avg dur:', sum(durs) / float(len(durs)) * 1000.0, 'ms')
+
+	print('')
+	print('Max iters:', max(num_iters))
+	print('Avg iters:', sum(num_iters) / float(len(num_iters)))
 
 if __name__ == '__main__':
 	tx_gm = getGMFromFile('../data/2-2/tx_gm_vr_2-2.txt')
